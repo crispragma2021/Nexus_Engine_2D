@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { GDEvent, GDInstance, GDInstruction, GDObjectDef, GDProject } from "./types";
+import type { GDEvent, GDInstance, GDInstruction, GDObjectDef, GDProject, GDSceneVariable } from "./types";
 import { createDemoProject, uid } from "./data";
 
 export type EditorTab = "scene" | "events";
