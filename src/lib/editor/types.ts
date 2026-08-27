@@ -86,4 +86,10 @@ export interface GDProject {
   events: GDEvent[];
   scenes: string[];
   extensions: string[];
+  /** scene background color, GDevelop "R;G;B" format */
+  backgroundColor?: string;
+  /** currently active layer name */
+  activeLayer?: string;
+  sceneVariables?: GDSceneVariable[];
+
 }
