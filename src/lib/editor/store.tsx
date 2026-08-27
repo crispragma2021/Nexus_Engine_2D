@@ -104,6 +104,9 @@ export function newEvent(kind: GDEvent["kind"]): GDEvent {
 const MUTATING = new Set([
   "moveInstance", "updateInstance", "deleteInstance", "addInstance",
   "addObject", "updateObject", "deleteObject", "toggleLayer", "addLayer",
+  "toggleLayerLock", "setActiveLayer", "setBackgroundColor",
+  "addSceneVariable", "updateSceneVariable", "deleteSceneVariable",
+
   "addEvent", "deleteEvent", "updateEvent",
   "addInstruction", "updateInstruction", "deleteInstruction",
 ]);
