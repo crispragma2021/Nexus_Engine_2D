@@ -29,7 +29,11 @@ export function PreviewDialog({ open, onOpenChange }: PreviewDialogProps) {
   const start = useCallback(() => {
     const runtime = new GameRuntime(project, {
       onPlaySound: (file) => setStatus(`♪ ${file}`),
-      onChangeScene: (scene) => setStatus(`Scene → ${scene}`),
+      onChangeScene: (scene) => {
+        setStatus(`Scene → ${scene} (restarting)`);
+        // A scene change restarts the simulation, like GDevelop does.
+        window.setTimeout(() => runtimeRef.current?.reset(), 400);
+      },
     });
     runtimeRef.current = runtime;
     return runtime;
