@@ -10,7 +10,10 @@ import {
   ChevronRight,
   Trash2,
   CornerDownRight,
+  PlaySquare,
 } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+
 import { useEditor } from "@/lib/editor/store";
 import type { GDEvent, GDInstruction } from "@/lib/editor/types";
 import { instructionById, sentenceParts } from "@/lib/editor/instructions";
