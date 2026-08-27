@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Pause, Play, RotateCcw, X } from "lucide-react";
+import { Pause, Play, RotateCcw } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { useEditor } from "@/lib/editor/store";
 import { GameRuntime } from "@/lib/runtime/engine";
@@ -121,7 +121,6 @@ export function PreviewDialog({ open, onOpenChange }: PreviewDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        showCloseButton={false}
         className="max-w-[min(96vw,900px)] gap-0 border-separator bg-toolbar p-0"
       >
         <DialogTitle className="sr-only">Game preview</DialogTitle>
@@ -150,15 +149,6 @@ export function PreviewDialog({ open, onOpenChange }: PreviewDialogProps) {
             className="flex h-9 w-9 items-center justify-center rounded text-muted-foreground hover:bg-elevated hover:text-foreground"
           >
             <RotateCcw className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            title="Close preview"
-            aria-label="Close preview"
-            onClick={() => onOpenChange(false)}
-            className="flex h-9 w-9 items-center justify-center rounded text-muted-foreground hover:bg-elevated hover:text-foreground"
-          >
-            <X className="h-4 w-4" />
           </button>
         </div>
 
