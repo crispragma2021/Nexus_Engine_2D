@@ -182,8 +182,9 @@ function EventNode({
                     )}
                   </button>
                   <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    Conditions
+                    Condiciones
                   </span>
+
                   <span className="flex-1" />
                   <button
                     type="button"
