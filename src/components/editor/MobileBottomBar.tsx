@@ -5,15 +5,16 @@ import { useEditor } from "@/lib/editor/store";
 import { cn } from "@/lib/utils";
 import { ObjectsPanel } from "./ObjectsPanel";
 import { PropertiesPanel } from "./PropertiesPanel";
+import { GroupsPanel } from "./GroupsPanel";
 
 type SheetKey = "objects" | "groups" | "properties" | "instances" | "layers";
 
 const ITEMS: { key: SheetKey; label: string; icon: React.ElementType }[] = [
-  { key: "objects", label: "Objects", icon: Box },
-  { key: "groups", label: "Groups", icon: Boxes },
-  { key: "properties", label: "Edit", icon: PenLine },
-  { key: "instances", label: "Instances", icon: ListTree },
-  { key: "layers", label: "Layers", icon: Layers },
+  { key: "objects", label: "Objetos", icon: Box },
+  { key: "groups", label: "Grupos", icon: Boxes },
+  { key: "properties", label: "Editar", icon: PenLine },
+  { key: "instances", label: "Instancias", icon: ListTree },
+  { key: "layers", label: "Capas", icon: Layers },
 ];
 
 const MIN_VH = 25;
