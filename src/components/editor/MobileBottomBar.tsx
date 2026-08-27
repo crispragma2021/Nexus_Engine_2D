@@ -55,12 +55,10 @@ export function MobileBottomBar() {
           side="bottom"
           className="h-[65vh] border-separator bg-toolbar p-0 text-foreground"
         >
-          <SheetHeader className="border-b border-separator px-4 py-2 text-left">
-            <SheetTitle className="text-[12px] font-semibold uppercase tracking-wide text-muted-foreground">
-              {ITEMS.find((i) => i.key === open)?.label ?? ""}
-            </SheetTitle>
+          <SheetHeader className="sr-only">
+            <SheetTitle>{ITEMS.find((i) => i.key === open)?.label ?? ""}</SheetTitle>
           </SheetHeader>
-          <div className="min-h-0 flex-1 overflow-hidden [&>aside]:h-full [&>aside]:w-full [&>aside]:border-0 [&>aside>div:first-child]:hidden">
+          <div className="h-full min-h-0 flex-1 overflow-hidden pt-2 [&>aside]:h-full [&>aside]:w-full [&>aside]:border-0">
             {open === "objects" || open === "groups" ? <ObjectsPanel /> : null}
             {isRight ? <PropertiesPanel /> : null}
           </div>
