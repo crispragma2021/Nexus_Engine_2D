@@ -21,6 +21,10 @@ export default defineTool({
   inputSchema: {
     query: z.string().trim().default("").describe("Optional text filter on the type name."),
   },
+  outputSchema: {
+    count: z.number(),
+    items: z.array(z.object({ name: z.string(), description: z.string() })),
+  },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: ({ query }) => {
     const q = query.toLowerCase();

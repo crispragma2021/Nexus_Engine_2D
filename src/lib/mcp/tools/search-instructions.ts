@@ -17,6 +17,19 @@ export default defineTool({
       .describe(`One of: ${INSTRUCTION_CATEGORIES.join(", ")}.`),
     limit: z.number().int().min(1).max(100).default(20),
   },
+  outputSchema: {
+    count: z.number(),
+    items: z.array(
+      z.object({
+        id: z.string(),
+        kind: z.string(),
+        category: z.string(),
+        name: z.string(),
+        description: z.string(),
+        sentence: z.string(),
+      }),
+    ),
+  },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: ({ query, kind, category, limit }) => {
     const q = query.toLowerCase();

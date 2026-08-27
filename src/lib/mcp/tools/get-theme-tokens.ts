@@ -31,6 +31,7 @@ export default defineTool({
       .default("")
       .describe("Optional single token role to return, e.g. 'primary'."),
   },
+  outputSchema: { tokens: z.record(z.string(), z.string().nullable()) },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: ({ role }) => {
     const tokens = role ? { [role]: TOKENS[role as keyof typeof TOKENS] ?? null } : TOKENS;

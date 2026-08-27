@@ -8,6 +8,7 @@ export default defineTool({
   description:
     "Return the full definition of one condition or action, including its sentence template and typed parameters.",
   inputSchema: { id: z.string().trim().min(1).describe("Instruction id, e.g. 'sprite.collision'.") },
+  outputSchema: { instruction: z.looseObject({ id: z.string() }) },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: ({ id }) => {
     const def = instructionById(id);
