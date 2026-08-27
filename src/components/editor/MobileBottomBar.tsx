@@ -144,7 +144,8 @@ export function MobileBottomBar() {
             <SheetTitle>{ITEMS.find((i) => i.key === open)?.label ?? ""}</SheetTitle>
           </SheetHeader>
           <div className="h-full min-h-0 flex-1 overflow-hidden [&>aside]:h-full [&>aside]:w-full [&>aside]:border-0">
-            {open === "objects" || open === "groups" ? <ObjectsPanel /> : null}
+            {open === "objects" ? <ObjectsPanel /> : null}
+            {open === "groups" ? <GroupsPanel /> : null}
             {isRight ? <PropertiesPanel /> : null}
           </div>
         </SheetContent>
