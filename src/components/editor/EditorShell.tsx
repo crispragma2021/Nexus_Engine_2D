@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils";
 function Tabs() {
   const { ui, dispatch } = useEditor();
   return (
-    <div className="flex h-8 shrink-0 items-end gap-0.5 border-b border-separator bg-toolbar px-2">
+    <div className="flex h-10 shrink-0 items-end gap-0.5 border-b border-separator bg-toolbar px-2 md:h-8">
       {(["scene", "events"] as const).map((t) => (
         <button
           key={t}
@@ -40,17 +40,30 @@ function Body() {
       <div className="flex min-h-0 flex-1">
         {ui.tab === "scene" ? (
           <>
-            {ui.showLeftPanel && <ObjectsPanel />}
+            {ui.showLeftPanel && (
+              <div className="hidden md:contents">
+                <ObjectsPanel />
+              </div>
+            )}
             <SceneCanvas />
-            {ui.showRightPanel && <PropertiesPanel />}
+            {ui.showRightPanel && (
+              <div className="hidden md:contents">
+                <PropertiesPanel />
+              </div>
+            )}
           </>
         ) : (
           <>
-            {ui.showLeftPanel && <ObjectsPanel />}
+            {ui.showLeftPanel && (
+              <div className="hidden md:contents">
+                <ObjectsPanel />
+              </div>
+            )}
             <EventsEditor />
           </>
         )}
       </div>
+      <MobileBottomBar />
       <ProjectManagerDrawer />
     </div>
   );
