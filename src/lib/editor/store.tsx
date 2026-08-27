@@ -28,7 +28,14 @@ type Action =
   | { type: "updateObject"; id: string; patch: Partial<GDObjectDef> }
   | { type: "deleteObject"; id: string }
   | { type: "toggleLayer"; name: string }
+  | { type: "toggleLayerLock"; name: string }
+  | { type: "setActiveLayer"; name: string }
+  | { type: "setBackgroundColor"; value: string }
+  | { type: "addSceneVariable" }
+  | { type: "updateSceneVariable"; id: string; patch: Partial<GDSceneVariable> }
+  | { type: "deleteSceneVariable"; id: string }
   | { type: "addLayer" }
+
   | { type: "addEvent"; parentId: string | null; kind: GDEvent["kind"] }
   | { type: "deleteEvent"; id: string }
   | { type: "toggleCollapse"; id: string }
