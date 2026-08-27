@@ -5,6 +5,7 @@ import { ObjectsPanel } from "./ObjectsPanel";
 import { SceneCanvas } from "./SceneCanvas";
 import { PropertiesPanel } from "./PropertiesPanel";
 import { EventsEditor } from "./EventsEditor";
+import { MobileBottomBar } from "./MobileBottomBar";
 import { cn } from "@/lib/utils";
 
 function Tabs() {
