@@ -4,6 +4,7 @@ import { Bell, Crown, GraduationCap, Hammer, Home, Languages, Menu, Gamepad2, St
 import { MainMenuDrawer } from "./MainMenuDrawer";
 import { CreateGameDialog } from "./CreateGameDialog";
 import { ProfileDialog } from "./ProfileDialog";
+import { LanguageDialog } from "./LanguageDialog";
 import { CreateView } from "./CreateView";
 import { LearnView } from "./LearnView";
 import { PlayView } from "./PlayView";
@@ -25,6 +26,7 @@ export function AppShell() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [langOpen, setLangOpen] = useState(false);
   const [email, setEmail] = useState<string | null>(null);
   const navigate = useNavigate();
 
@@ -106,7 +108,12 @@ export function AppShell() {
             <button type="button" aria-label="Notificaciones" className="p-2 text-foreground">
               <Bell className="size-5" />
             </button>
-            <button type="button" aria-label="Idioma" className="p-2 text-foreground">
+            <button
+              type="button"
+              aria-label="Idioma"
+              onClick={() => setLangOpen(true)}
+              className="p-2 text-foreground"
+            >
               <Languages className="size-5" />
             </button>
             <Link
@@ -157,6 +164,7 @@ export function AppShell() {
         onPreferences={() => setProfileOpen(true)}
       />
       <CreateGameDialog open={createOpen} onOpenChange={setCreateOpen} />
+      <LanguageDialog open={langOpen} onOpenChange={setLangOpen} />
       <ProfileDialog open={profileOpen} onOpenChange={setProfileOpen} onSignOut={signOut} />
     </div>
   );
