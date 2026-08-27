@@ -1,5 +1,5 @@
 import * as React from "react";
-import type { GDEvent, GDInstance, GDInstruction, GDObjectDef, GDProject } from "./types";
+import type { GDEvent, GDInstance, GDInstruction, GDObjectDef, GDProject, GDSceneVariable } from "./types";
 import { createDemoProject, uid } from "./data";
 
 export type EditorTab = "scene" | "events";
@@ -28,7 +28,14 @@ type Action =
   | { type: "updateObject"; id: string; patch: Partial<GDObjectDef> }
   | { type: "deleteObject"; id: string }
   | { type: "toggleLayer"; name: string }
+  | { type: "toggleLayerLock"; name: string }
+  | { type: "setActiveLayer"; name: string }
+  | { type: "setBackgroundColor"; value: string }
+  | { type: "addSceneVariable" }
+  | { type: "updateSceneVariable"; id: string; patch: Partial<GDSceneVariable> }
+  | { type: "deleteSceneVariable"; id: string }
   | { type: "addLayer" }
+
   | { type: "addEvent"; parentId: string | null; kind: GDEvent["kind"] }
   | { type: "deleteEvent"; id: string }
   | { type: "toggleCollapse"; id: string }
@@ -97,6 +104,9 @@ export function newEvent(kind: GDEvent["kind"]): GDEvent {
 const MUTATING = new Set([
   "moveInstance", "updateInstance", "deleteInstance", "addInstance",
   "addObject", "updateObject", "deleteObject", "toggleLayer", "addLayer",
+  "toggleLayerLock", "setActiveLayer", "setBackgroundColor",
+  "addSceneVariable", "updateSceneVariable", "deleteSceneVariable",
+
   "addEvent", "deleteEvent", "updateEvent",
   "addInstruction", "updateInstruction", "deleteInstruction",
 ]);
@@ -157,11 +167,43 @@ function projectReducer(project: GDProject, action: Action): GDProject {
           l.name === action.name ? { ...l, visible: !l.visible } : l,
         ),
       };
+    case "toggleLayerLock":
+      return {
+        ...project,
+        layers: project.layers.map((l) =>
+          l.name === action.name ? { ...l, locked: !l.locked } : l,
+        ),
+      };
+    case "setActiveLayer":
+      return { ...project, activeLayer: action.name };
+    case "setBackgroundColor":
+      return { ...project, backgroundColor: action.value };
+    case "addSceneVariable":
+      return {
+        ...project,
+        sceneVariables: [
+          ...(project.sceneVariables ?? []),
+          { id: uid("var"), name: "Variable", type: "number" as const, value: "0" },
+        ],
+      };
+    case "updateSceneVariable":
+      return {
+        ...project,
+        sceneVariables: (project.sceneVariables ?? []).map((v) =>
+          v.id === action.id ? { ...v, ...action.patch } : v,
+        ),
+      };
+    case "deleteSceneVariable":
+      return {
+        ...project,
+        sceneVariables: (project.sceneVariables ?? []).filter((v) => v.id !== action.id),
+      };
     case "addLayer":
       return {
         ...project,
         layers: [...project.layers, { name: `Layer ${project.layers.length + 1}`, visible: true }],
       };
+
     case "addEvent": {
       const ev = newEvent(action.kind);
       if (!action.parentId) return { ...project, events: [...project.events, ev] };

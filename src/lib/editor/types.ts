@@ -37,7 +37,18 @@ export interface GDInstance {
 export interface GDLayer {
   name: string;
   visible: boolean;
+  locked?: boolean;
 }
+
+export type GDSceneVariableType = "number" | "string" | "boolean";
+
+export interface GDSceneVariable {
+  id: string;
+  name: string;
+  type: GDSceneVariableType;
+  value: string;
+}
+
 
 export interface GDInstruction {
   id: string;
@@ -75,4 +86,10 @@ export interface GDProject {
   events: GDEvent[];
   scenes: string[];
   extensions: string[];
+  /** scene background color, GDevelop "R;G;B" format */
+  backgroundColor?: string;
+  /** currently active layer name */
+  activeLayer?: string;
+  sceneVariables?: GDSceneVariable[];
+
 }

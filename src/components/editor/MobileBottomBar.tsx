@@ -141,9 +141,16 @@ export function MobileBottomBar() {
             <span className="h-1.5 w-10 rounded-full bg-muted-foreground/50" />
           </div>
 
-          <SheetHeader className="sr-only">
-            <SheetTitle>{ITEMS.find((i) => i.key === open)?.label ?? ""}</SheetTitle>
+          <SheetHeader className="shrink-0 space-y-0 px-4 py-3">
+            <SheetTitle className="text-left text-[17px] font-bold text-foreground">
+              {open === "properties"
+                ? "Propiedades de la instancia"
+                : open === "groups"
+                  ? "Grupos de objetos"
+                  : (ITEMS.find((i) => i.key === open)?.label ?? "")}
+            </SheetTitle>
           </SheetHeader>
+
           <div className="h-full min-h-0 flex-1 overflow-hidden [&>aside]:h-full [&>aside]:w-full [&>aside]:border-0">
             {open === "objects" ? <ObjectsPanel /> : null}
             {open === "groups" ? <GroupsPanel /> : null}

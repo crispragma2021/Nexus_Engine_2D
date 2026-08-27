@@ -10,7 +10,10 @@ import {
   ChevronRight,
   Trash2,
   CornerDownRight,
+  PlaySquare,
 } from "lucide-react";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+
 import { useEditor } from "@/lib/editor/store";
 import type { GDEvent, GDInstruction } from "@/lib/editor/types";
 import { instructionById, sentenceParts } from "@/lib/editor/instructions";
@@ -152,7 +155,7 @@ function EventNode({
               />
               <button
                 type="button"
-                title="Add a sub-event"
+                title="Añadir un sub-evento"
                 onClick={() => dispatch({ type: "addEvent", parentId: event.id, kind: "standard" })}
                 className="text-muted-foreground hover:text-foreground"
               >
@@ -182,12 +185,13 @@ function EventNode({
                     )}
                   </button>
                   <span className="text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    Conditions
+                    Condiciones
                   </span>
+
                   <span className="flex-1" />
                   <button
                     type="button"
-                    title="Add a sub-event"
+                    title="Añadir un sub-evento"
                     onClick={() =>
                       dispatch({ type: "addEvent", parentId: event.id, kind: "standard" })
                     }
@@ -197,7 +201,7 @@ function EventNode({
                   </button>
                   <button
                     type="button"
-                    title="Delete event"
+                    title="Eliminar evento"
                     onClick={() => dispatch({ type: "deleteEvent", id: event.id })}
                     className="hidden text-muted-foreground hover:text-destructive group-hover:block"
                   >
@@ -212,12 +216,12 @@ function EventNode({
                   onClick={() => onSelector({ eventId: event.id, slot: "conditions" })}
                   className="mb-1 ml-2 flex items-center gap-1 text-[11px] text-link hover:text-link-hover"
                 >
-                  <Plus className="h-3 w-3" /> Add condition
+                  <Plus className="h-3 w-3" /> Añadir condición
                 </button>
               </div>
               <div className="w-1/2">
                 <div className="px-1.5 pt-1 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Actions
+                  Acciones
                 </div>
                 {event.actions.map((a) => (
                   <InstructionRow key={a.id} ins={a} eventId={event.id} slot="actions" />
@@ -227,7 +231,7 @@ function EventNode({
                   onClick={() => onSelector({ eventId: event.id, slot: "actions" })}
                   className="mb-1 ml-2 flex items-center gap-1 text-[11px] text-link hover:text-link-hover"
                 >
-                  <Plus className="h-3 w-3" /> Add action
+                  <Plus className="h-3 w-3" /> Añadir acción
                 </button>
               </div>
             </div>
@@ -260,21 +264,21 @@ function EToolbar({ onSearch }: { onSearch: (v: string) => void }) {
         className={btn}
         onClick={() => dispatch({ type: "addEvent", parentId: null, kind: "standard" })}
       >
-        <Plus className="h-3.5 w-3.5" /> Add a new event
+        <Plus className="h-3.5 w-3.5" /> Añadir un nuevo evento
       </button>
       <button
         type="button"
         className={btn}
         onClick={() => dispatch({ type: "addEvent", parentId: null, kind: "comment" })}
       >
-        <MessageSquare className="h-3.5 w-3.5" /> Comment
+        <MessageSquare className="h-3.5 w-3.5" /> Comentario
       </button>
       <button
         type="button"
         className={btn}
         onClick={() => dispatch({ type: "addEvent", parentId: null, kind: "group" })}
       >
-        <FolderPlus className="h-3.5 w-3.5" /> Group
+        <FolderPlus className="h-3.5 w-3.5" /> Grupo
       </button>
       <div className="mx-1 h-5 w-px bg-separator" />
       <button
@@ -296,7 +300,7 @@ function EToolbar({ onSearch }: { onSearch: (v: string) => void }) {
         <Search className="h-3 w-3 text-muted-foreground" />
         <input
           onChange={(e) => onSearch(e.target.value)}
-          placeholder="Search in events"
+          placeholder="Buscar en eventos"
           className="w-40 bg-transparent text-[11px] text-foreground outline-none placeholder:text-muted-foreground"
         />
       </div>
@@ -320,10 +324,53 @@ function matches(event: GDEvent, q: string): boolean {
   return text.includes(q.toLowerCase()) || event.subEvents.some((s) => matches(s, q));
 }
 
+const EVENT_MENU: { label: string; kind: GDEvent["kind"] }[] = [
+  { label: "Comentario", kind: "comment" },
+  { label: "Si no (else)", kind: "standard" },
+  { label: "Por cada objeto", kind: "standard" },
+  { label: "Para cada variable hija (de una estructura o array-modelo)", kind: "standard" },
+  { label: "Grupo de eventos", kind: "group" },
+  { label: "Código Javascript", kind: "standard" },
+  { label: "Vincular eventos externos", kind: "standard" },
+  { label: "Repetir", kind: "standard" },
+  { label: "Evento estándar", kind: "standard" },
+  { label: "Siempre que", kind: "standard" },
+];
+
+function AddEventMenu({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  const { dispatch } = useEditor();
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="bottom" className="max-h-[70vh] overflow-y-auto border-separator bg-toolbar p-0">
+        <SheetHeader className="sr-only">
+          <SheetTitle>Añadir un evento</SheetTitle>
+        </SheetHeader>
+        <ul className="py-2">
+          {EVENT_MENU.map((item) => (
+            <li key={item.label}>
+              <button
+                type="button"
+                onClick={() => {
+                  dispatch({ type: "addEvent", parentId: null, kind: item.kind });
+                  onOpenChange(false);
+                }}
+                className="w-full px-5 py-4 text-left text-[15px] text-foreground hover:bg-elevated"
+              >
+                {item.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 export function EventsEditor() {
-  const { project } = useEditor();
+  const { project, dispatch } = useEditor();
   const [selector, setSelector] = React.useState<SelectorTarget>(null);
   const [query, setQuery] = React.useState("");
+  const [menuOpen, setMenuOpen] = React.useState(false);
 
   const events = project.events.filter((e) => matches(e, query));
 
@@ -340,12 +387,44 @@ export function EventsEditor() {
             onSelector={setSelector}
           />
         ))}
+
+        <div className="flex items-center justify-between border-l-2 border-separator px-3 py-2 text-[15px] text-muted-foreground">
+          <button
+            type="button"
+            onClick={() => dispatch({ type: "addEvent", parentId: null, kind: "standard" })}
+            className="hover:text-foreground"
+          >
+            + Añadir un nuevo evento
+          </button>
+          <button type="button" onClick={() => setMenuOpen(true)} className="hover:text-foreground">
+            + Añadir…
+          </button>
+        </div>
+
         {events.length === 0 && (
-          <p className="p-6 text-center text-[12px] text-muted-foreground">
-            No events. Click “Add a new event” to start building your game logic.
-          </p>
+          <div className="px-6 py-8 text-center">
+            <h2 className="text-[20px] font-bold text-foreground">Añade tu primer evento</h2>
+            <p className="mt-2 text-[15px] text-muted-foreground">
+              Los eventos definen las reglas de un juego.
+            </p>
+            <button
+              type="button"
+              onClick={() => dispatch({ type: "addEvent", parentId: null, kind: "standard" })}
+              className="mx-auto mt-6 flex items-center gap-2 rounded-lg bg-primary px-6 py-3 text-[15px] font-semibold text-primary-foreground"
+            >
+              <Plus className="h-5 w-5" /> Añadir un evento
+            </button>
+            <button
+              type="button"
+              onClick={() => setMenuOpen(true)}
+              className="mx-auto mt-4 flex items-center gap-2 text-[15px] text-foreground"
+            >
+              <PlaySquare className="h-5 w-5" /> Ver tutorial
+            </button>
+          </div>
         )}
       </div>
+      <AddEventMenu open={menuOpen} onOpenChange={setMenuOpen} />
       {selector && (
         <InstructionSelectorDialog
           eventId={selector.eventId}
@@ -355,4 +434,5 @@ export function EventsEditor() {
       )}
     </div>
   );
+
 }
