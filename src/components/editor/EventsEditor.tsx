@@ -152,7 +152,7 @@ function EventNode({
               />
               <button
                 type="button"
-                title="Add a sub-event"
+                title="Añadir un sub-evento"
                 onClick={() => dispatch({ type: "addEvent", parentId: event.id, kind: "standard" })}
                 className="text-muted-foreground hover:text-foreground"
               >
@@ -188,7 +188,7 @@ function EventNode({
                   <span className="flex-1" />
                   <button
                     type="button"
-                    title="Add a sub-event"
+                    title="Añadir un sub-evento"
                     onClick={() =>
                       dispatch({ type: "addEvent", parentId: event.id, kind: "standard" })
                     }
@@ -198,7 +198,7 @@ function EventNode({
                   </button>
                   <button
                     type="button"
-                    title="Delete event"
+                    title="Eliminar evento"
                     onClick={() => dispatch({ type: "deleteEvent", id: event.id })}
                     className="hidden text-muted-foreground hover:text-destructive group-hover:block"
                   >
@@ -213,12 +213,12 @@ function EventNode({
                   onClick={() => onSelector({ eventId: event.id, slot: "conditions" })}
                   className="mb-1 ml-2 flex items-center gap-1 text-[11px] text-link hover:text-link-hover"
                 >
-                  <Plus className="h-3 w-3" /> Add condition
+                  <Plus className="h-3 w-3" /> Añadir condición
                 </button>
               </div>
               <div className="w-1/2">
                 <div className="px-1.5 pt-1 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
-                  Actions
+                  Acciones
                 </div>
                 {event.actions.map((a) => (
                   <InstructionRow key={a.id} ins={a} eventId={event.id} slot="actions" />
@@ -228,7 +228,7 @@ function EventNode({
                   onClick={() => onSelector({ eventId: event.id, slot: "actions" })}
                   className="mb-1 ml-2 flex items-center gap-1 text-[11px] text-link hover:text-link-hover"
                 >
-                  <Plus className="h-3 w-3" /> Add action
+                  <Plus className="h-3 w-3" /> Añadir acción
                 </button>
               </div>
             </div>
@@ -261,21 +261,21 @@ function EToolbar({ onSearch }: { onSearch: (v: string) => void }) {
         className={btn}
         onClick={() => dispatch({ type: "addEvent", parentId: null, kind: "standard" })}
       >
-        <Plus className="h-3.5 w-3.5" /> Add a new event
+        <Plus className="h-3.5 w-3.5" /> Añadir un nuevo evento
       </button>
       <button
         type="button"
         className={btn}
         onClick={() => dispatch({ type: "addEvent", parentId: null, kind: "comment" })}
       >
-        <MessageSquare className="h-3.5 w-3.5" /> Comment
+        <MessageSquare className="h-3.5 w-3.5" /> Comentario
       </button>
       <button
         type="button"
         className={btn}
         onClick={() => dispatch({ type: "addEvent", parentId: null, kind: "group" })}
       >
-        <FolderPlus className="h-3.5 w-3.5" /> Group
+        <FolderPlus className="h-3.5 w-3.5" /> Grupo
       </button>
       <div className="mx-1 h-5 w-px bg-separator" />
       <button
@@ -297,7 +297,7 @@ function EToolbar({ onSearch }: { onSearch: (v: string) => void }) {
         <Search className="h-3 w-3 text-muted-foreground" />
         <input
           onChange={(e) => onSearch(e.target.value)}
-          placeholder="Search in events"
+          placeholder="Buscar en eventos"
           className="w-40 bg-transparent text-[11px] text-foreground outline-none placeholder:text-muted-foreground"
         />
       </div>
