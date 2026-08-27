@@ -321,10 +321,53 @@ function matches(event: GDEvent, q: string): boolean {
   return text.includes(q.toLowerCase()) || event.subEvents.some((s) => matches(s, q));
 }
 
+const EVENT_MENU: { label: string; kind: GDEvent["kind"] }[] = [
+  { label: "Comentario", kind: "comment" },
+  { label: "Si no (else)", kind: "standard" },
+  { label: "Por cada objeto", kind: "standard" },
+  { label: "Para cada variable hija (de una estructura o array-modelo)", kind: "standard" },
+  { label: "Grupo de eventos", kind: "group" },
+  { label: "Código Javascript", kind: "standard" },
+  { label: "Vincular eventos externos", kind: "standard" },
+  { label: "Repetir", kind: "standard" },
+  { label: "Evento estándar", kind: "standard" },
+  { label: "Siempre que", kind: "standard" },
+];
+
+function AddEventMenu({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
+  const { dispatch } = useEditor();
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="bottom" className="max-h-[70vh] overflow-y-auto border-separator bg-toolbar p-0">
+        <SheetHeader className="sr-only">
+          <SheetTitle>Añadir un evento</SheetTitle>
+        </SheetHeader>
+        <ul className="py-2">
+          {EVENT_MENU.map((item) => (
+            <li key={item.label}>
+              <button
+                type="button"
+                onClick={() => {
+                  dispatch({ type: "addEvent", parentId: null, kind: item.kind });
+                  onOpenChange(false);
+                }}
+                className="w-full px-5 py-4 text-left text-[15px] text-foreground hover:bg-elevated"
+              >
+                {item.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 export function EventsEditor() {
-  const { project } = useEditor();
+  const { project, dispatch } = useEditor();
   const [selector, setSelector] = React.useState<SelectorTarget>(null);
   const [query, setQuery] = React.useState("");
+  const [menuOpen, setMenuOpen] = React.useState(false);
 
   const events = project.events.filter((e) => matches(e, query));
 
@@ -341,12 +384,44 @@ export function EventsEditor() {
             onSelector={setSelector}
           />
         ))}
+
+        <div className="flex items-center justify-between border-l-2 border-separator px-3 py-2 text-[15px] text-muted-foreground">
+          <button
+            type="button"
+            onClick={() => dispatch({ type: "addEvent", parentId: null, kind: "standard" })}
+            className="hover:text-foreground"
+          >
+            + Añadir un nuevo evento
+          </button>
+          <button type="button" onClick={() => setMenuOpen(true)} className="hover:text-foreground">
+            + Añadir…
+          </button>
+        </div>
+
         {events.length === 0 && (
-          <p className="p-6 text-center text-[12px] text-muted-foreground">
-            No events. Click “Add a new event” to start building your game logic.
-          </p>
+          <div className="px-6 py-8 text-center">
+            <h2 className="text-[20px] font-bold text-foreground">Añade tu primer evento</h2>
+            <p className="mt-2 text-[15px] text-muted-foreground">
+              Los eventos definen las reglas de un juego.
+            </p>
+            <button
+              type="button"
+              onClick={() => dispatch({ type: "addEvent", parentId: null, kind: "standard" })}
+              className="mx-auto mt-6 flex items-center gap-2 rounded-lg bg-primary px-6 py-3 text-[15px] font-semibold text-primary-foreground"
+            >
+              <Plus className="h-5 w-5" /> Añadir un evento
+            </button>
+            <button
+              type="button"
+              onClick={() => setMenuOpen(true)}
+              className="mx-auto mt-4 flex items-center gap-2 text-[15px] text-foreground"
+            >
+              <PlaySquare className="h-5 w-5" /> Ver tutorial
+            </button>
+          </div>
         )}
       </div>
+      <AddEventMenu open={menuOpen} onOpenChange={setMenuOpen} />
       {selector && (
         <InstructionSelectorDialog
           eventId={selector.eventId}
@@ -356,4 +431,5 @@ export function EventsEditor() {
       )}
     </div>
   );
+
 }
