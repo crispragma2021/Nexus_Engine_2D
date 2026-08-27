@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Link } from "@tanstack/react-router";
+import { useEffect, useState } from "react";
+import { Link, useNavigate } from "@tanstack/react-router";
 import { Bell, Crown, GraduationCap, Hammer, Home, Languages, Menu, Gamepad2, Store } from "lucide-react";
 import { MainMenuDrawer } from "./MainMenuDrawer";
 import { CreateGameDialog } from "./CreateGameDialog";
@@ -8,6 +8,7 @@ import { CreateView } from "./CreateView";
 import { LearnView } from "./LearnView";
 import { PlayView } from "./PlayView";
 import { StoreView } from "./StoreView";
+import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
 type TabId = "learn" | "create" | "play" | "store";
@@ -24,6 +25,22 @@ export function AppShell() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [email, setEmail] = useState<string | null>(null);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setEmail(data.session?.user.email ?? null));
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) =>
+      setEmail(session?.user.email ?? null),
+    );
+    return () => sub.subscription.unsubscribe();
+  }, []);
+
+  const signOut = async () => {
+    await supabase.auth.signOut();
+    setProfileOpen(false);
+  };
+
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-window">
@@ -48,17 +65,28 @@ export function AppShell() {
           >
             <Home className="size-6" />
           </button>
-          <button
-            type="button"
-            onClick={() => setProfileOpen(true)}
-            className="ml-auto flex items-center gap-2 text-base font-bold text-foreground"
-          >
-            <span
-              className="size-7 rounded-md bg-gradient-to-br from-[#7046EC] to-[#FF8569]"
-              aria-hidden
-            />
-            Mi perfil
-          </button>
+          {email ? (
+            <button
+              type="button"
+              onClick={() => setProfileOpen(true)}
+              className="ml-auto flex items-center gap-2 text-base font-bold text-foreground"
+            >
+              <span
+                className="size-7 rounded-md bg-gradient-to-br from-[#7046EC] to-[#FF8569]"
+                aria-hidden
+              />
+              Mi perfil
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => navigate({ to: "/auth", search: { next: "/" } })}
+              className="ml-auto rounded-md bg-primary px-3 py-2 text-sm font-bold text-primary-foreground"
+            >
+              Iniciar sesión
+            </button>
+          )}
+
         </div>
 
         <div className="flex h-12 items-center gap-3 border-t border-separator bg-toolbar px-3">
@@ -129,7 +157,7 @@ export function AppShell() {
         onPreferences={() => setProfileOpen(true)}
       />
       <CreateGameDialog open={createOpen} onOpenChange={setCreateOpen} />
-      <ProfileDialog open={profileOpen} onOpenChange={setProfileOpen} />
+      <ProfileDialog open={profileOpen} onOpenChange={setProfileOpen} onSignOut={signOut} />
     </div>
   );
 }
