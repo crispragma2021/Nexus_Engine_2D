@@ -16,6 +16,7 @@ import {
 import { useState } from "react";
 import { useEditor } from "@/lib/editor/store";
 import { PreviewDialog } from "./PreviewDialog";
+import { AskAiDialog } from "./AskAiDialog";
 import { cn } from "@/lib/utils";
 
 function TButton({
@@ -56,6 +57,7 @@ const Sep = () => <div className="mx-1 h-5 w-px bg-separator" />;
 export function TopToolbar() {
   const { ui, dispatch, canUndo, canRedo, project } = useEditor();
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [askOpen, setAskOpen] = useState(false);
 
   return (
     <div className="flex h-12 shrink-0 items-center gap-1 overflow-x-auto border-b border-separator bg-toolbar px-2 md:h-11 md:overflow-visible [&::-webkit-scrollbar]:h-0">
@@ -161,7 +163,19 @@ export function TopToolbar() {
         <Play className="h-3.5 w-3.5 fill-current" />
         Preview
       </button>
+      <button
+        type="button"
+        onClick={() => setAskOpen(true)}
+        className="ml-1 flex h-9 shrink-0 items-center gap-1.5 rounded px-2 text-[11px] font-bold text-foreground hover:bg-elevated md:h-7"
+      >
+        <span
+          className="size-5 rounded-md bg-gradient-to-br from-[#FFBC57] via-[#FF8569] to-[#7046EC]"
+          aria-hidden
+        />
+        Ask AI
+      </button>
       <PreviewDialog open={previewOpen} onOpenChange={setPreviewOpen} />
+      <AskAiDialog open={askOpen} onOpenChange={setAskOpen} />
     </div>
   );
 }

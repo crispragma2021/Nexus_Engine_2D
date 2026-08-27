@@ -1,4 +1,5 @@
-import { Github, Youtube, HelpCircle, Tag, ExternalLink } from "lucide-react";
+import * as React from "react";
+import { Github, Youtube, HelpCircle, Tag, ExternalLink, ChevronRight, ChevronDown, Crown, Coins, Trophy, Lock } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 interface Props {
@@ -21,6 +22,46 @@ const SOCIALS = [
     text: "Suscríbete e introduce tu nombre de usuario de YouTube aquí para obtener 50 créditos gratuitos.",
   },
 ];
+
+
+const ACHIEVEMENTS = [
+  {
+    title: "Primer evento",
+    text: "Has añadido tu primer evento, ¡estamos seguros de que no será el último!",
+    date: "11/8/2026",
+    unlocked: true,
+  },
+  {
+    title: "Primer comportamiento",
+    text: "Usaste un comportamiento por primera vez, las cosas son mucho más simples con ellos, ¿no crees?",
+    unlocked: false,
+  },
+  {
+    title: "Primera vista previa",
+    text: "¡Previsualizar tu juego es el primer paso hacia un juego completo!",
+    unlocked: false,
+  },
+];
+
+function Collapsible({ label, disabled }: { label: string; disabled?: boolean }) {
+  const [open, setOpen] = React.useState(false);
+  return (
+    <div className="rounded-md border border-separator">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-3 px-4 py-4 text-left text-base text-foreground disabled:text-muted-foreground"
+      >
+        {open ? <ChevronDown className="size-4" /> : <ChevronRight className="size-4" />}
+        {label}
+      </button>
+      {open && !disabled ? (
+        <p className="px-11 pb-4 text-sm text-muted-foreground">Nada por aquí todavía.</p>
+      ) : null}
+    </div>
+  );
+}
 
 export function ProfileDialog({ open, onOpenChange, onSignOut }: Props) {
   return (
@@ -60,6 +101,90 @@ export function ProfileDialog({ open, onOpenChange, onSignOut }: Props) {
             <p className="text-sm text-muted-foreground">Enlace de donación</p>
             <p className="text-base text-foreground">No hay enlace definido.</p>
           </div>
+
+          <section className="space-y-3">
+            <h4 className="text-xl font-bold text-foreground">Suscripciones</h4>
+            <p className="text-base text-muted-foreground">
+              Publicar en Android, iOS, desbloquear más proyectos en la nube, tablas de
+              clasificación, funciones de colaboración y más servicios en línea.{" "}
+              <a href="#" className="text-link underline">Aprende más</a>
+            </p>
+            <div className="flex items-center gap-4 rounded-xl border-2 border-[#45D9A1] bg-elevated p-4">
+              <Crown className="size-8 shrink-0 text-[#FFBC57]" />
+              <div className="min-w-0 flex-1 space-y-3">
+                <p className="text-base font-semibold text-foreground">
+                  ¡Desbloquea el acceso completo para crear sin límites!
+                </p>
+                <button
+                  type="button"
+                  className="w-full rounded-md bg-primary py-3 text-sm font-bold text-primary-foreground"
+                >
+                  Seleccione una suscripción
+                </button>
+              </div>
+            </div>
+          </section>
+
+          <section className="space-y-3">
+            <h4 className="text-xl font-bold text-foreground">Créditos</h4>
+            <p className="text-base text-muted-foreground">
+              Consigue ventajas y beneficios en la nube cuando te acerques al lanzamiento de tu
+              juego. <a href="#" className="text-link underline">Más información</a>
+            </p>
+            <div className="space-y-3 rounded-xl bg-primary p-4">
+              <p className="flex items-center gap-3 text-base font-medium text-primary-foreground">
+                <Coins className="size-6 text-[#FFBC57]" /> Créditos disponibles: 0
+              </p>
+              <button
+                type="button"
+                className="w-full rounded-md border border-primary-foreground/70 py-3 text-sm font-bold text-primary-foreground"
+              >
+                Obtener paquetes de créditos
+              </button>
+            </div>
+          </section>
+
+          <section className="space-y-3">
+            <h4 className="text-xl font-bold text-foreground">Contribuciones</h4>
+            <Collapsible label="Extensiones (0)" />
+            <Collapsible label="Ejemplos (0)" />
+            <Collapsible label="Recursos (¡próximamente!)" disabled />
+            <p className="text-center text-sm text-muted-foreground">
+              ¿Faltan algunas contribuciones? Si eres el autor, agrega tu nombre de usuario en los
+              autores del ejemplo o la extensión, o pídeselo al autor original.
+            </p>
+          </section>
+
+          <section className="space-y-3">
+            <h4 className="text-xl font-bold text-foreground">Logros</h4>
+            <div className="py-2 text-center">
+              <Trophy className="mx-auto size-10 text-[#C9B6FC]" />
+              <p className="mt-2 text-lg font-bold text-foreground">1/22 logros</p>
+            </div>
+            <ul className="space-y-4">
+              {ACHIEVEMENTS.map((a) => (
+                <li key={a.title} className="flex gap-3">
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className={
+                        a.unlocked
+                          ? "text-base font-bold text-foreground"
+                          : "text-base font-bold text-muted-foreground"
+                      }
+                    >
+                      {a.title}
+                    </p>
+                    <p className="text-sm text-muted-foreground">{a.text}</p>
+                  </div>
+                  {a.unlocked ? (
+                    <span className="shrink-0 text-sm text-foreground">{a.date}</span>
+                  ) : (
+                    <Lock className="size-4 shrink-0 text-muted-foreground" />
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
 
           <div className="space-y-3 pt-2">
             <button
