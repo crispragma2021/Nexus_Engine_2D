@@ -157,7 +157,7 @@ export function AppShell() {
         onPreferences={() => setProfileOpen(true)}
       />
       <CreateGameDialog open={createOpen} onOpenChange={setCreateOpen} />
-      <ProfileDialog open={profileOpen} onOpenChange={setProfileOpen} />
+      <ProfileDialog open={profileOpen} onOpenChange={setProfileOpen} onSignOut={signOut} />
     </div>
   );
 }
