@@ -161,7 +161,19 @@ export function TopToolbar() {
         <Play className="h-3.5 w-3.5 fill-current" />
         Preview
       </button>
+      <button
+        type="button"
+        onClick={() => setAskOpen(true)}
+        className="ml-1 flex h-9 shrink-0 items-center gap-1.5 rounded px-2 text-[11px] font-bold text-foreground hover:bg-elevated md:h-7"
+      >
+        <span
+          className="size-5 rounded-md bg-gradient-to-br from-[#FFBC57] via-[#FF8569] to-[#7046EC]"
+          aria-hidden
+        />
+        Ask AI
+      </button>
       <PreviewDialog open={previewOpen} onOpenChange={setPreviewOpen} />
+      <AskAiDialog open={askOpen} onOpenChange={setAskOpen} />
     </div>
   );
 }
