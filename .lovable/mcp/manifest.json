@@ -1,0 +1,129 @@
+{
+  "version": 1,
+  "sdk_version": "0.28.0",
+  "path": "/mcp",
+  "auth": {
+    "type": "none"
+  },
+  "mcp": {
+    "server": {
+      "name": "gdevelop-design-guru",
+      "version": "0.1.0",
+      "title": "GDevelop Design Guru"
+    },
+    "tools": [
+      {
+        "name": "search_instructions",
+        "title": "Search GDevelop instructions",
+        "description": "Search the catalog of GDevelop-style event conditions and actions by text, kind and category.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "query": {
+              "default": "",
+              "description": "Free text matched against name and description.",
+              "type": "string"
+            },
+            "kind": {
+              "default": "any",
+              "description": "Instruction kind filter.",
+              "type": "string",
+              "enum": [
+                "condition",
+                "action",
+                "any"
+              ]
+            },
+            "category": {
+              "default": "All",
+              "description": "One of: All, Keyboard, Mouse, Scene, Sprite, Text, Variables, Timers, Camera, Audio.",
+              "type": "string"
+            },
+            "limit": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          }
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_instruction",
+        "title": "Get instruction details",
+        "description": "Return the full definition of one condition or action, including its sentence template and typed parameters.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Instruction id, e.g. 'sprite.collision'."
+            }
+          },
+          "required": [
+            "id"
+          ]
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_object_types",
+        "title": "List object types",
+        "description": "List the GDevelop-style object types available in this editor with their descriptions.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "query": {
+              "default": "",
+              "description": "Optional text filter on the type name.",
+              "type": "string"
+            }
+          }
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "get_theme_tokens",
+        "title": "Get GDevelop dark theme tokens",
+        "description": "Return the GDevelop 5 dark theme color tokens used by this editor UI, as hex values keyed by role.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "$schema": "http://json-schema.org/draft-07/schema#",
+          "type": "object",
+          "properties": {
+            "role": {
+              "default": "",
+              "description": "Optional single token role to return, e.g. 'primary'.",
+              "type": "string"
+            }
+          }
+        },
+        "outputSchema": null
+      }
+    ]
+  }
+}
