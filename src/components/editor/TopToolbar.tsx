@@ -1,0 +1,160 @@
+import {
+  Menu,
+  Undo2,
+  Redo2,
+  Grid3x3,
+  Magnet,
+  Eye,
+  ZoomIn,
+  ZoomOut,
+  Play,
+  PanelLeft,
+  PanelRight,
+  Save,
+  Smartphone,
+} from "lucide-react";
+import { useEditor } from "@/lib/editor/store";
+import { cn } from "@/lib/utils";
+
+function TButton({
+  title,
+  active,
+  disabled,
+  onClick,
+  children,
+}: {
+  title: string;
+  active?: boolean;
+  disabled?: boolean;
+  onClick?: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      aria-label={title}
+      aria-pressed={active}
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        "flex h-7 w-7 items-center justify-center rounded transition-colors",
+        "text-muted-foreground hover:bg-elevated hover:text-foreground",
+        active && "bg-elevated text-link",
+        disabled && "opacity-35 hover:bg-transparent",
+      )}
+    >
+      {children}
+    </button>
+  );
+}
+
+const Sep = () => <div className="mx-1 h-5 w-px bg-separator" />;
+
+export function TopToolbar() {
+  const { ui, dispatch, canUndo, canRedo, project } = useEditor();
+
+  return (
+    <div className="flex h-11 shrink-0 items-center gap-1 border-b border-separator bg-toolbar px-2">
+      <TButton
+        title="Open the project manager"
+        onClick={() => dispatch({ type: "ui", patch: { projectManagerOpen: true } })}
+      >
+        <Menu className="h-4 w-4" />
+      </TButton>
+
+      <div className="ml-1 flex items-center gap-1 truncate text-xs text-muted-foreground">
+        <span className="truncate font-medium text-foreground">{project.name}</span>
+        <span className="text-separator">/</span>
+        <span className="truncate">Level 1</span>
+      </div>
+
+      <Sep />
+      <TButton title="Save project">
+        <Save className="h-4 w-4" />
+      </TButton>
+      <TButton title="Undo" disabled={!canUndo} onClick={() => dispatch({ type: "undo" })}>
+        <Undo2 className="h-4 w-4" />
+      </TButton>
+      <TButton title="Redo" disabled={!canRedo} onClick={() => dispatch({ type: "redo" })}>
+        <Redo2 className="h-4 w-4" />
+      </TButton>
+
+      {ui.tab === "scene" && (
+        <>
+          <Sep />
+          <TButton
+            title="Toggle grid"
+            active={ui.grid}
+            onClick={() => dispatch({ type: "ui", patch: { grid: !ui.grid } })}
+          >
+            <Grid3x3 className="h-4 w-4" />
+          </TButton>
+          <TButton
+            title="Snap to grid"
+            active={ui.snap}
+            onClick={() => dispatch({ type: "ui", patch: { snap: !ui.snap } })}
+          >
+            <Magnet className="h-4 w-4" />
+          </TButton>
+          <TButton title="Show collision masks">
+            <Eye className="h-4 w-4" />
+          </TButton>
+          <Sep />
+          <TButton
+            title="Zoom out"
+            onClick={() =>
+              dispatch({ type: "ui", patch: { zoom: Math.max(0.25, +(ui.zoom - 0.1).toFixed(2)) } })
+            }
+          >
+            <ZoomOut className="h-4 w-4" />
+          </TButton>
+          <button
+            type="button"
+            onClick={() => dispatch({ type: "ui", patch: { zoom: 1 } })}
+            className="w-12 rounded px-1 py-0.5 text-center text-[11px] tabular-nums text-muted-foreground hover:bg-elevated hover:text-foreground"
+            title="Reset zoom"
+          >
+            {Math.round(ui.zoom * 100)}%
+          </button>
+          <TButton
+            title="Zoom in"
+            onClick={() =>
+              dispatch({ type: "ui", patch: { zoom: Math.min(3, +(ui.zoom + 0.1).toFixed(2)) } })
+            }
+          >
+            <ZoomIn className="h-4 w-4" />
+          </TButton>
+        </>
+      )}
+
+      <div className="flex-1" />
+
+      <TButton
+        title="Toggle left panel"
+        active={ui.showLeftPanel}
+        onClick={() => dispatch({ type: "ui", patch: { showLeftPanel: !ui.showLeftPanel } })}
+      >
+        <PanelLeft className="h-4 w-4" />
+      </TButton>
+      <TButton
+        title="Toggle right panel"
+        active={ui.showRightPanel}
+        onClick={() => dispatch({ type: "ui", patch: { showRightPanel: !ui.showRightPanel } })}
+      >
+        <PanelRight className="h-4 w-4" />
+      </TButton>
+      <Sep />
+      <TButton title="Preview on device">
+        <Smartphone className="h-4 w-4" />
+      </TButton>
+      <button
+        type="button"
+        className="ml-1 flex h-7 items-center gap-1.5 rounded bg-success px-3 text-[11px] font-semibold uppercase tracking-wide text-window transition-opacity hover:opacity-90"
+      >
+        <Play className="h-3.5 w-3.5 fill-current" />
+        Preview
+      </button>
+    </div>
+  );
+}
