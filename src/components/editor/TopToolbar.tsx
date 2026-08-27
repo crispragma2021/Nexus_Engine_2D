@@ -38,7 +38,7 @@ function TButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "flex h-7 w-7 items-center justify-center rounded transition-colors",
+        "flex h-9 w-9 shrink-0 items-center justify-center rounded transition-colors md:h-7 md:w-7",
         "text-muted-foreground hover:bg-elevated hover:text-foreground",
         active && "bg-elevated text-link",
         disabled && "opacity-35 hover:bg-transparent",
