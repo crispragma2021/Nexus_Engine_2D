@@ -18,7 +18,7 @@ function Tabs() {
           type="button"
           onClick={() => dispatch({ type: "ui", patch: { tab: t } })}
           className={cn(
-            "rounded-t px-4 py-1 text-[11px] font-semibold uppercase tracking-wide transition-colors",
+            "rounded-t px-5 py-2 text-[11px] font-semibold uppercase tracking-wide transition-colors md:px-4 md:py-1",
             ui.tab === t
               ? "bg-window text-foreground shadow-[inset_0_2px_0_var(--primary)]"
               : "text-muted-foreground hover:bg-elevated hover:text-foreground",
