@@ -38,7 +38,7 @@ function TButton({
       disabled={disabled}
       onClick={onClick}
       className={cn(
-        "flex h-7 w-7 items-center justify-center rounded transition-colors",
+        "flex h-9 w-9 shrink-0 items-center justify-center rounded transition-colors md:h-7 md:w-7",
         "text-muted-foreground hover:bg-elevated hover:text-foreground",
         active && "bg-elevated text-link",
         disabled && "opacity-35 hover:bg-transparent",
@@ -55,7 +55,7 @@ export function TopToolbar() {
   const { ui, dispatch, canUndo, canRedo, project } = useEditor();
 
   return (
-    <div className="flex h-11 shrink-0 items-center gap-1 border-b border-separator bg-toolbar px-2">
+    <div className="flex h-12 shrink-0 items-center gap-1 overflow-x-auto border-b border-separator bg-toolbar px-2 md:h-11 md:overflow-visible [&::-webkit-scrollbar]:h-0">
       <TButton
         title="Open the project manager"
         onClick={() => dispatch({ type: "ui", patch: { projectManagerOpen: true } })}
@@ -63,7 +63,7 @@ export function TopToolbar() {
         <Menu className="h-4 w-4" />
       </TButton>
 
-      <div className="ml-1 flex items-center gap-1 truncate text-xs text-muted-foreground">
+      <div className="ml-1 hidden items-center gap-1 truncate text-xs text-muted-foreground md:flex">
         <span className="truncate font-medium text-foreground">{project.name}</span>
         <span className="text-separator">/</span>
         <span className="truncate">Level 1</span>
@@ -128,29 +128,31 @@ export function TopToolbar() {
         </>
       )}
 
-      <div className="flex-1" />
+      <div className="hidden flex-1 md:block" />
 
-      <TButton
-        title="Toggle left panel"
-        active={ui.showLeftPanel}
-        onClick={() => dispatch({ type: "ui", patch: { showLeftPanel: !ui.showLeftPanel } })}
-      >
-        <PanelLeft className="h-4 w-4" />
-      </TButton>
-      <TButton
-        title="Toggle right panel"
-        active={ui.showRightPanel}
-        onClick={() => dispatch({ type: "ui", patch: { showRightPanel: !ui.showRightPanel } })}
-      >
-        <PanelRight className="h-4 w-4" />
-      </TButton>
+      <div className="hidden md:contents">
+        <TButton
+          title="Toggle left panel"
+          active={ui.showLeftPanel}
+          onClick={() => dispatch({ type: "ui", patch: { showLeftPanel: !ui.showLeftPanel } })}
+        >
+          <PanelLeft className="h-4 w-4" />
+        </TButton>
+        <TButton
+          title="Toggle right panel"
+          active={ui.showRightPanel}
+          onClick={() => dispatch({ type: "ui", patch: { showRightPanel: !ui.showRightPanel } })}
+        >
+          <PanelRight className="h-4 w-4" />
+        </TButton>
+      </div>
       <Sep />
       <TButton title="Preview on device">
         <Smartphone className="h-4 w-4" />
       </TButton>
       <button
         type="button"
-        className="ml-1 flex h-7 items-center gap-1.5 rounded bg-success px-3 text-[11px] font-semibold uppercase tracking-wide text-window transition-opacity hover:opacity-90"
+        className="sticky right-0 ml-1 flex h-9 shrink-0 items-center gap-1.5 rounded bg-success px-3 shadow-[-8px_0_8px_-6px_var(--toolbar)] md:static md:shadow-none text-[11px] font-semibold uppercase tracking-wide text-window transition-opacity hover:opacity-90 md:h-7"
       >
         <Play className="h-3.5 w-3.5 fill-current" />
         Preview
