@@ -239,7 +239,7 @@ export function PropertiesPanel() {
 
   return (
     <aside className="flex w-64 shrink-0 flex-col border-l border-separator bg-toolbar">
-      <div className="flex h-9 shrink-0 border-b border-separator">
+      <div className="hidden h-9 shrink-0 border-b border-separator md:flex">
         {TABS.map((t) => (
           <button
             key={t.key}
