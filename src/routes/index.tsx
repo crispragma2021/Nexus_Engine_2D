@@ -1,20 +1,20 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { EditorShell } from "@/components/editor/EditorShell";
+import { AppShell } from "@/components/home/AppShell";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Game Editor — Scene & Events (GDevelop-style UI)" },
+      { title: "Game Studio — Aprende, crea y publica juegos 2D" },
       {
         name: "description",
         content:
-          "Editor de juegos con canvas de escena, panel de objetos, propiedades, capas y hoja de eventos sin código, con la UI/UX del editor de GDevelop 5.",
+          "Inicio del estudio de juegos: cursos, creación de proyectos, catálogo de juegos y tienda de assets, con el editor de escenas y eventos incluido.",
       },
-      { property: "og:title", content: "Game Editor — Scene & Events" },
+      { property: "og:title", content: "Game Studio — Aprende, crea y publica juegos 2D" },
       {
         property: "og:description",
         content:
-          "Scene editor con instancias arrastrables y events editor con condiciones y acciones, en tema oscuro estilo GDevelop 5.",
+          "Crea juegos sin programar: plantillas, tienda de recursos y editor visual de escenas y eventos.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -24,5 +24,5 @@ export const Route = createFileRoute("/")({
 });
 
 function Index() {
-  return <EditorShell />;
+  return <AppShell />;
 }
