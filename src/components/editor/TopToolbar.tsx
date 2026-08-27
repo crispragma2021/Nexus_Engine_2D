@@ -13,7 +13,9 @@ import {
   Save,
   Smartphone,
 } from "lucide-react";
+import { useState } from "react";
 import { useEditor } from "@/lib/editor/store";
+import { PreviewDialog } from "./PreviewDialog";
 import { cn } from "@/lib/utils";
 
 function TButton({
@@ -53,6 +55,7 @@ const Sep = () => <div className="mx-1 h-5 w-px bg-separator" />;
 
 export function TopToolbar() {
   const { ui, dispatch, canUndo, canRedo, project } = useEditor();
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   return (
     <div className="flex h-12 shrink-0 items-center gap-1 overflow-x-auto border-b border-separator bg-toolbar px-2 md:h-11 md:overflow-visible [&::-webkit-scrollbar]:h-0">
@@ -152,11 +155,13 @@ export function TopToolbar() {
       </TButton>
       <button
         type="button"
+        onClick={() => setPreviewOpen(true)}
         className="sticky right-0 ml-1 flex h-9 shrink-0 items-center gap-1.5 rounded bg-success px-3 shadow-[-8px_0_8px_-6px_var(--toolbar)] md:static md:shadow-none text-[11px] font-semibold uppercase tracking-wide text-window transition-opacity hover:opacity-90 md:h-7"
       >
         <Play className="h-3.5 w-3.5 fill-current" />
         Preview
       </button>
+      <PreviewDialog open={previewOpen} onOpenChange={setPreviewOpen} />
     </div>
   );
 }
