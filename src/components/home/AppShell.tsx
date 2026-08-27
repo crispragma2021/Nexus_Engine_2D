@@ -65,17 +65,28 @@ export function AppShell() {
           >
             <Home className="size-6" />
           </button>
-          <button
-            type="button"
-            onClick={() => setProfileOpen(true)}
-            className="ml-auto flex items-center gap-2 text-base font-bold text-foreground"
-          >
-            <span
-              className="size-7 rounded-md bg-gradient-to-br from-[#7046EC] to-[#FF8569]"
-              aria-hidden
-            />
-            Mi perfil
-          </button>
+          {email ? (
+            <button
+              type="button"
+              onClick={() => setProfileOpen(true)}
+              className="ml-auto flex items-center gap-2 text-base font-bold text-foreground"
+            >
+              <span
+                className="size-7 rounded-md bg-gradient-to-br from-[#7046EC] to-[#FF8569]"
+                aria-hidden
+              />
+              Mi perfil
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => navigate({ to: "/auth", search: { next: "/" } })}
+              className="ml-auto rounded-md bg-primary px-3 py-2 text-sm font-bold text-primary-foreground"
+            >
+              Iniciar sesión
+            </button>
+          )}
+
         </div>
 
         <div className="flex h-12 items-center gap-3 border-t border-separator bg-toolbar px-3">
