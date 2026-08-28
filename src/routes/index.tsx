@@ -4,13 +4,13 @@ import { AppShell } from "@/components/home/AppShell";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Game Studio — Aprende, crea y publica juegos 2D" },
+      { title: "Nexus Engine — Aprende, crea y publica juegos 2D" },
       {
         name: "description",
         content:
           "Inicio del estudio de juegos: cursos, creación de proyectos, catálogo de juegos y tienda de assets, con el editor de escenas y eventos incluido.",
       },
-      { property: "og:title", content: "Game Studio — Aprende, crea y publica juegos 2D" },
+      { property: "og:title", content: "Nexus Engine — Aprende, crea y publica juegos 2D" },
       {
         property: "og:description",
         content:
