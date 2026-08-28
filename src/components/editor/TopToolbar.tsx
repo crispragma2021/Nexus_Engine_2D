@@ -12,9 +12,12 @@ import {
   PanelRight,
   Save,
   Smartphone,
+  Loader2,
 } from "lucide-react";
 import { useState } from "react";
+import { toast } from "sonner";
 import { useEditor } from "@/lib/editor/store";
+import { saveProjectEverywhere } from "@/lib/projects/save";
 import { PreviewDialog } from "./PreviewDialog";
 import { AskAiDialog } from "./AskAiDialog";
 import { cn } from "@/lib/utils";
@@ -58,6 +61,21 @@ export function TopToolbar() {
   const { ui, dispatch, canUndo, canRedo, project } = useEditor();
   const [previewOpen, setPreviewOpen] = useState(false);
   const [askOpen, setAskOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const onSave = async () => {
+    setSaving(true);
+    try {
+      const result = await saveProjectEverywhere(project);
+      if (result.drive) toast.success("Guardado en el dispositivo y en Google Drive");
+      else if (result.driveError) toast.warning(`Guardado local. Drive: ${result.driveError}`);
+      else toast.success("Guardado en este dispositivo");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "No se pudo guardar");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   return (
     <div className="flex h-12 shrink-0 items-center gap-1 overflow-x-auto border-b border-separator bg-toolbar px-2 md:h-11 md:overflow-visible [&::-webkit-scrollbar]:h-0">
@@ -75,8 +93,8 @@ export function TopToolbar() {
       </div>
 
       <Sep />
-      <TButton title="Save project">
-        <Save className="h-4 w-4" />
+      <TButton title="Guardar proyecto" disabled={saving} onClick={() => void onSave()}>
+        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
       </TButton>
       <TButton title="Undo" disabled={!canUndo} onClick={() => dispatch({ type: "undo" })}>
         <Undo2 className="h-4 w-4" />

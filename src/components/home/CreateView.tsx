@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Coins, Plus, RefreshCw, SendHorizonal, X } from "lucide-react";
 import { TEMPLATES } from "@/lib/home/data";
+import { ProjectsSection } from "./ProjectsSection";
 
 interface Props {
   onCreateGame: () => void;
@@ -66,6 +67,9 @@ export function CreateView({ onCreateGame }: Props) {
           </button>
         </div>
       </section>
+
+      <ProjectsSection />
+
 
       <div className="mt-7 flex items-center justify-between gap-3">
         <h2 className="flex items-center gap-3 text-2xl font-bold text-foreground">

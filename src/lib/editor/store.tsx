@@ -1,6 +1,7 @@
 import * as React from "react";
 import type { GDEvent, GDInstance, GDInstruction, GDObjectDef, GDProject, GDSceneVariable } from "./types";
 import { createDemoProject, uid } from "./data";
+import { getCurrentProject } from "@/lib/projects/local";
 
 export type EditorTab = "scene" | "events";
 
@@ -43,6 +44,7 @@ type Action =
   | { type: "addInstruction"; eventId: string; slot: "conditions" | "actions"; instruction: GDInstruction }
   | { type: "updateInstruction"; eventId: string; slot: "conditions" | "actions"; instructionId: string; patch: Partial<GDInstruction> }
   | { type: "deleteInstruction"; eventId: string; slot: "conditions" | "actions"; instructionId: string }
+  | { type: "loadProject"; project: GDProject }
   | { type: "undo" }
   | { type: "redo" };
 
@@ -257,6 +259,8 @@ function reducer(state: State, action: Action): State {
   switch (action.type) {
     case "ui":
       return { ...state, ui: { ...state.ui, ...action.patch } };
+    case "loadProject":
+      return { project: action.project, ui: initialUI, past: [], future: [] };
     case "selectInstance": {
       if (!action.id) return { ...state, ui: { ...state.ui, selectedInstanceIds: [] } };
       const sel = action.additive
@@ -338,6 +342,14 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
     past: [],
     future: [],
   }));
+
+  // Carga el proyecto seleccionado desde Inicio (Drive o dispositivo) tras hidratar.
+  React.useEffect(() => {
+    const current = getCurrentProject();
+    if (current?.project) {
+      dispatch({ type: "loadProject", project: current.project });
+    }
+  }, []);
 
   const value = React.useMemo<Ctx>(
     () => ({
