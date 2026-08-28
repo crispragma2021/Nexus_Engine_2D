@@ -15,5 +15,10 @@ export default defineConfig({
   },
   vite: {
     plugins: [mcpPlugin()],
+    server: {
+      // Allow the sandbox/preview proxy host (and Lovable's own dev host) to
+      // reach the dev server, so the editor can be previewed from a browser.
+      allowedHosts: true,
+    },
   },
 });

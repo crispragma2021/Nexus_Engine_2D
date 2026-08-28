@@ -1,74 +1,334 @@
 import * as React from "react";
-import type { GDEvent, GDInstance, GDInstruction, GDObjectDef, GDProject, GDSceneVariable } from "./types";
-import { createDemoProject, uid } from "./data";
+import type {
+  GDEvent,
+  GDExtension,
+  GDGameSettings,
+  GDInstance,
+  GDInstruction,
+  GDLayer,
+  GDObjectAnimation,
+  GDObjectBehavior,
+  GDObjectDef,
+  GDObjectGroup,
+  GDObjectPoint,
+  GDProject,
+  GDResource,
+  GDScene,
+  GDEffect,
+  GDVariable,
+} from "./types";
+import { DEFAULT_GRID } from "./types";
+import { createDemoProject } from "./data";
+import { newEvent } from "./events";
 import { getCurrentProject } from "@/lib/projects/local";
+import {
+  BASE_LAYER_NAME,
+  makeScene,
+  migrateProject,
+  renameSceneInProject,
+  withScene,
+} from "./scenes";
+import { newNameGenerator, uid } from "./ids";
 
 export type EditorTab = "scene" | "events";
 
+export type OpenedTabKind =
+  | "home"
+  | "scene"
+  | "gameSettings"
+  | "resources"
+  | "extensions"
+  | "externalEvents"
+  | "externalLayouts"
+  | "globalVariables";
+
+export interface OpenedTab {
+  id: string;
+  kind: OpenedTabKind;
+  label: string;
+  /** scene name for kind === "scene" */
+  sceneName?: string;
+}
+
+export interface VariableScopeLocation {
+  scope: "scene" | "global" | "object" | "instance";
+  objectId?: string;
+  /** parent structure/array names, e.g. ["Jugador", "controles"] */
+  path?: string[];
+}
+
+/**
+ * Modal dialogs. GDevelop opens these from the panels/toolbars; keeping them in
+ * the store (instead of local component state) lets any panel request one and
+ * lets keyboard shortcuts reach them.
+ */
+export type EditorDialog =
+  | { name: "newObject" }
+  | { name: "objectEditor"; objectId: string }
+  | { name: "behaviors"; objectId: string }
+  | { name: "effects"; targetKind: "object" | "instance" | "layer"; targetId: string }
+  | { name: "sceneProperties" }
+  | { name: "projectProperties" }
+  | { name: "variables"; scope: "scene" | "global" }
+  | { name: "resources" }
+  | {
+      name: "instruction";
+      eventId: string;
+      slot: "conditions" | "actions";
+      instructionId: string | null;
+    }
+  | { name: "externalEvents"; eventsName: string }
+  | null;
+
 interface UIState {
   tab: EditorTab;
-  selectedInstanceIds: string[];
-  selectedObjectId: string | null;
+  dialog: EditorDialog;
+  openedTabs: OpenedTab[];
+  activeTabId: string;
   rightTab: "properties" | "instances" | "layers";
+  selectedInstanceIds: string[];
+  selectedObjectIds: string[];
+  /** events selected in the sheet (ctrl/shift click, like GDevelop) */
+  selectedEventIds: string[];
+  selectedGroupName: string | null;
+  selectedLayerName: string | null;
+  selectedInstruction: {
+    eventId: string;
+    slot: "conditions" | "actions";
+    instructionId: string;
+  } | null;
   showLeftPanel: boolean;
   showRightPanel: boolean;
-  grid: boolean;
-  snap: boolean;
+  showObjectsPanel: boolean;
+  showGroupsPanel: boolean;
+  showPropertiesPanel: boolean;
+  showInstancesPanel: boolean;
+  showLayersPanel: boolean;
   zoom: number;
+  pan: { x: number; y: number };
+  showHitMasks: boolean;
+  /** GDevelop's "Máscara de la ventana": darken outside the game window */
+  windowMask: boolean;
+  showHiddenInstances: boolean;
   projectManagerOpen: boolean;
+  commandPaletteOpen: boolean;
+  previewOpen: boolean;
+  previewWithDebugger: boolean;
+  debuggerOpen: boolean;
+  cursorPosition: { x: number; y: number } | null;
 }
 
 type Action =
+  // shell / ui
   | { type: "ui"; patch: Partial<UIState> }
-  | { type: "selectInstance"; id: string | null; additive?: boolean }
-  | { type: "moveInstance"; id: string; x: number; y: number }
-  | { type: "updateInstance"; id: string; patch: Partial<GDInstance> }
-  | { type: "deleteInstance"; id: string }
-  | { type: "addInstance"; objectId: string; x: number; y: number }
-  | { type: "addObject"; object: GDObjectDef }
+  | { type: "openDialog"; dialog: NonNullable<EditorDialog> }
+  | { type: "closeDialog" }
+  | { type: "markSaved" }
+  | { type: "openTab"; tab: Omit<OpenedTab, "id"> & { id?: string } }
+  | { type: "closeTab"; id: string }
+  | { type: "setActiveTab"; id: string }
+  // project
+  | { type: "loadProject"; project: GDProject }
+  | { type: "renameProject"; name: string }
+  | { type: "updateGameSettings"; patch: Partial<GDGameSettings> }
+  | { type: "setActiveScene"; name: string }
+  | { type: "addScene"; name?: string }
+  | { type: "deleteScene"; name: string }
+  | { type: "renameScene"; from: string; to: string }
+  | { type: "duplicateScene"; name: string }
+  | { type: "updateScene"; patch: Partial<GDScene> }
+  | { type: "updateGrid"; patch: Partial<GDScene["grid"]> }
+  // objects
+  | { type: "addObject"; object: Partial<GDObjectDef> & { name: string; type: string } }
   | { type: "updateObject"; id: string; patch: Partial<GDObjectDef> }
+  | { type: "renameObject"; id: string; name: string }
   | { type: "deleteObject"; id: string }
-  | { type: "toggleLayer"; name: string }
+  | { type: "duplicateObject"; id: string }
+  | { type: "setObjectGlobal"; id: string; isGlobal: boolean }
+  | { type: "addObjectAnimation"; objectId: string }
+  | {
+      type: "updateObjectAnimation";
+      objectId: string;
+      index: number;
+      patch: Partial<GDObjectAnimation>;
+    }
+  | { type: "deleteObjectAnimation"; objectId: string; index: number }
+  | { type: "addObjectFrame"; objectId: string; animationIndex: number }
+  | {
+      type: "updateObjectFrame";
+      objectId: string;
+      animationIndex: number;
+      frameIndex: number;
+      patch: Partial<GDObjectAnimation["images"][number]>;
+    }
+  | { type: "deleteObjectFrame"; objectId: string; animationIndex: number; frameIndex: number }
+  | { type: "addObjectPoint"; objectId: string; animationIndex: number }
+  | {
+      type: "updateObjectPoint";
+      objectId: string;
+      animationIndex: number;
+      pointIndex: number;
+      patch: Partial<GDObjectPoint>;
+    }
+  | { type: "deleteObjectPoint"; objectId: string; animationIndex: number; pointIndex: number }
+  // behaviors & effects
+  | { type: "addBehavior"; objectId: string; behavior: GDObjectBehavior }
+  | {
+      type: "updateBehavior";
+      objectId: string;
+      behaviorName: string;
+      patch: Partial<GDObjectBehavior>;
+    }
+  | { type: "deleteBehavior"; objectId: string; behaviorName: string }
+  | { type: "addEffect"; target: EffectTarget; effect: GDEffect }
+  | { type: "updateEffect"; target: EffectTarget; index: number; patch: Partial<GDEffect> }
+  | { type: "deleteEffect"; target: EffectTarget; index: number }
+  | { type: "moveEffect"; target: EffectTarget; index: number; direction: -1 | 1 }
+  | { type: "toggleEffect"; target: EffectTarget; index: number }
+  // instances
+  | { type: "selectInstances"; ids: string[] }
+  | { type: "selectEvents"; ids: string[] }
+  | { type: "addInstance"; objectId: string; x: number; y: number; layer?: string }
+  | { type: "addInstances"; instances: GDInstance[] }
+  | { type: "moveInstances"; ids: string[]; dx: number; dy: number }
+  | { type: "updateInstance"; id: string; patch: Partial<GDInstance> }
+  | { type: "deleteInstances"; ids: string[] }
+  | { type: "duplicateInstances"; ids: string[] }
+  | { type: "setInstancesZOrder"; ids: string[]; mode: "front" | "back" | "value"; value?: number }
+  | { type: "toggleInstancesLock"; ids: string[] }
+  | { type: "toggleInstancesVisibility"; ids: string[] }
+  // layers
+  | { type: "addLayer"; name?: string; isLightingLayer?: boolean }
+  | { type: "updateLayer"; name: string; patch: Partial<GDLayer> }
+  | { type: "renameLayer"; from: string; to: string }
+  | { type: "deleteLayer"; name: string }
+  | { type: "moveLayer"; name: string; direction: -1 | 1 }
+  | { type: "toggleLayerVisibility"; name: string }
   | { type: "toggleLayerLock"; name: string }
   | { type: "setActiveLayer"; name: string }
-  | { type: "setBackgroundColor"; value: string }
-  | { type: "addSceneVariable" }
-  | { type: "updateSceneVariable"; id: string; patch: Partial<GDSceneVariable> }
-  | { type: "deleteSceneVariable"; id: string }
-  | { type: "addLayer" }
-
-  | { type: "addEvent"; parentId: string | null; kind: GDEvent["kind"] }
+  // groups
+  | { type: "addObjectGroup"; name?: string }
+  | { type: "updateObjectGroup"; name: string; patch: Partial<GDObjectGroup> }
+  | { type: "deleteObjectGroup"; name: string }
+  // variables
+  | { type: "addVariable"; location: VariableScopeLocation }
+  | {
+      type: "updateVariable";
+      location: VariableScopeLocation;
+      path: string[];
+      patch: Partial<GDVariable>;
+    }
+  | { type: "deleteVariable"; location: VariableScopeLocation; path: string[] }
+  | { type: "addVariableChild"; location: VariableScopeLocation; path: string[] }
+  // events
+  | { type: "addEvent"; parentId: string | null; kind: GDEvent["kind"]; position?: number }
   | { type: "deleteEvent"; id: string }
+  | { type: "deleteEvents"; ids: string[] }
+  | { type: "duplicateEvent"; id: string }
   | { type: "toggleCollapse"; id: string }
+  | { type: "toggleEventDisabled"; id: string }
   | { type: "updateEvent"; id: string; patch: Partial<GDEvent> }
-  | { type: "addInstruction"; eventId: string; slot: "conditions" | "actions"; instruction: GDInstruction }
-  | { type: "updateInstruction"; eventId: string; slot: "conditions" | "actions"; instructionId: string; patch: Partial<GDInstruction> }
-  | { type: "deleteInstruction"; eventId: string; slot: "conditions" | "actions"; instructionId: string }
-  | { type: "loadProject"; project: GDProject }
+  | { type: "moveEvent"; id: string; direction: -1 | 1 }
+  | {
+      type: "addInstruction";
+      eventId: string;
+      slot: "conditions" | "actions";
+      instruction: GDInstruction;
+    }
+  | {
+      type: "updateInstruction";
+      eventId: string;
+      slot: "conditions" | "actions";
+      instructionId: string;
+      patch: Partial<GDInstruction>;
+    }
+  | {
+      type: "deleteInstruction";
+      eventId: string;
+      slot: "conditions" | "actions";
+      instructionId: string;
+    }
+  | {
+      type: "moveInstruction";
+      eventId: string;
+      slot: "conditions" | "actions";
+      instructionId: string;
+      direction: -1 | 1;
+    }
+  | {
+      type: "toggleInstructionInverted";
+      eventId: string;
+      slot: "conditions" | "actions";
+      instructionId: string;
+    }
+  // resources
+  | { type: "addResource"; resource: GDResource }
+  | { type: "updateResource"; name: string; patch: Partial<GDResource> }
+  | { type: "deleteResource"; name: string }
+  // extensions
+  | { type: "installExtension"; extension: GDExtension }
+  | { type: "uninstallExtension"; name: string }
+  // external events / layouts
+  | { type: "addExternalEvents"; name?: string }
+  | { type: "addExternalLayout"; name?: string }
+  // history
   | { type: "undo" }
   | { type: "redo" };
 
+export type EffectTarget =
+  | { kind: "object"; id: string }
+  | { kind: "instance"; id: string }
+  | { kind: "layer"; name: string };
+
 interface State {
   project: GDProject;
+  activeSceneName: string;
   ui: UIState;
-  past: GDProject[];
-  future: GDProject[];
+  past: { project: GDProject; sceneName: string }[];
+  future: { project: GDProject; sceneName: string }[];
+  /** dirty flag, drives the unsaved dot in the titlebar */
+  dirty: boolean;
 }
 
 const initialUI: UIState = {
   tab: "scene",
-  selectedInstanceIds: [],
-  selectedObjectId: null,
+  dialog: null,
+  openedTabs: [{ id: "scene:Level 1", kind: "scene", label: "Level 1", sceneName: "Level 1" }],
+  activeTabId: "scene:Level 1",
   rightTab: "properties",
+  selectedInstanceIds: [],
+  selectedObjectIds: [],
+  selectedEventIds: [],
+  selectedGroupName: null,
+  selectedLayerName: null,
+  selectedInstruction: null,
   showLeftPanel: true,
   showRightPanel: true,
-  grid: true,
-  snap: false,
+  showObjectsPanel: true,
+  showGroupsPanel: true,
+  showPropertiesPanel: true,
+  showInstancesPanel: true,
+  showLayersPanel: true,
   zoom: 1,
+  pan: { x: 0, y: 0 },
+  showHitMasks: false,
+  windowMask: true,
+  showHiddenInstances: true,
   projectManagerOpen: false,
+  commandPaletteOpen: false,
+  previewOpen: false,
+  previewWithDebugger: false,
+  debuggerOpen: false,
+  cursorPosition: null,
 };
 
-/* ---------- event tree helpers ---------- */
+/* ------------------------------------------------------------------ helpers */
+
+function patchScene(state: State, updater: (scene: GDScene) => GDScene): State {
+  const project = withScene(state.project, state.activeSceneName, updater);
+  if (project === state.project) return state;
+  return { ...state, project, dirty: true };
+}
 
 function mapEvents(events: GDEvent[], fn: (e: GDEvent) => GDEvent | null): GDEvent[] {
   const out: GDEvent[] = [];
@@ -83,236 +343,26 @@ function mapEvents(events: GDEvent[], fn: (e: GDEvent) => GDEvent | null): GDEve
 function insertSub(events: GDEvent[], parentId: string, child: GDEvent): GDEvent[] {
   return events.map((e) =>
     e.id === parentId
-      ? { ...e, collapsed: false, subEvents: [...e.subEvents, child] }
+      ? {
+          ...e,
+          collapsed: false,
+          subEvents: [...e.subEvents, child],
+        }
       : { ...e, subEvents: insertSub(e.subEvents, parentId, child) },
   );
 }
 
-export function newEvent(kind: GDEvent["kind"]): GDEvent {
-  return {
-    id: uid("ev"),
-    kind,
-    conditions: [],
-    actions: [],
-    subEvents: [],
-    collapsed: false,
-    ...(kind === "comment" ? { comment: "Write your comment here", commentColor: "green" as const } : {}),
-    ...(kind === "group" ? { groupName: "New group", groupColor: "#7046EC" } : {}),
-  };
-}
-
-/* ---------- reducer ---------- */
-
-const MUTATING = new Set([
-  "moveInstance", "updateInstance", "deleteInstance", "addInstance",
-  "addObject", "updateObject", "deleteObject", "toggleLayer", "addLayer",
-  "toggleLayerLock", "setActiveLayer", "setBackgroundColor",
-  "addSceneVariable", "updateSceneVariable", "deleteSceneVariable",
-
-  "addEvent", "deleteEvent", "updateEvent",
-  "addInstruction", "updateInstruction", "deleteInstruction",
-]);
-
-function projectReducer(project: GDProject, action: Action): GDProject {
-  switch (action.type) {
-    case "moveInstance":
-      return {
-        ...project,
-        instances: project.instances.map((i) =>
-          i.id === action.id ? { ...i, x: action.x, y: action.y } : i,
-        ),
-      };
-    case "updateInstance":
-      return {
-        ...project,
-        instances: project.instances.map((i) =>
-          i.id === action.id ? { ...i, ...action.patch } : i,
-        ),
-      };
-    case "deleteInstance":
-      return { ...project, instances: project.instances.filter((i) => i.id !== action.id) };
-    case "addInstance": {
-      const obj = project.objects.find((o) => o.id === action.objectId);
-      if (!obj) return project;
-      const inst: GDInstance = {
-        id: uid("inst"),
-        objectId: obj.id,
-        x: action.x,
-        y: action.y,
-        angle: 0,
-        width: obj.type === "Text" ? 140 : 64,
-        height: obj.type === "Text" ? 32 : 64,
-        zOrder: project.instances.length + 1,
-        layer: project.layers[0]?.name ?? "Base layer",
-        locked: false,
-        customSize: false,
-      };
-      return { ...project, instances: [...project.instances, inst] };
-    }
-    case "addObject":
-      return { ...project, objects: [...project.objects, action.object] };
-    case "updateObject":
-      return {
-        ...project,
-        objects: project.objects.map((o) => (o.id === action.id ? { ...o, ...action.patch } : o)),
-      };
-    case "deleteObject":
-      return {
-        ...project,
-        objects: project.objects.filter((o) => o.id !== action.id),
-        instances: project.instances.filter((i) => i.objectId !== action.id),
-      };
-    case "toggleLayer":
-      return {
-        ...project,
-        layers: project.layers.map((l) =>
-          l.name === action.name ? { ...l, visible: !l.visible } : l,
-        ),
-      };
-    case "toggleLayerLock":
-      return {
-        ...project,
-        layers: project.layers.map((l) =>
-          l.name === action.name ? { ...l, locked: !l.locked } : l,
-        ),
-      };
-    case "setActiveLayer":
-      return { ...project, activeLayer: action.name };
-    case "setBackgroundColor":
-      return { ...project, backgroundColor: action.value };
-    case "addSceneVariable":
-      return {
-        ...project,
-        sceneVariables: [
-          ...(project.sceneVariables ?? []),
-          { id: uid("var"), name: "Variable", type: "number" as const, value: "0" },
-        ],
-      };
-    case "updateSceneVariable":
-      return {
-        ...project,
-        sceneVariables: (project.sceneVariables ?? []).map((v) =>
-          v.id === action.id ? { ...v, ...action.patch } : v,
-        ),
-      };
-    case "deleteSceneVariable":
-      return {
-        ...project,
-        sceneVariables: (project.sceneVariables ?? []).filter((v) => v.id !== action.id),
-      };
-    case "addLayer":
-      return {
-        ...project,
-        layers: [...project.layers, { name: `Layer ${project.layers.length + 1}`, visible: true }],
-      };
-
-    case "addEvent": {
-      const ev = newEvent(action.kind);
-      if (!action.parentId) return { ...project, events: [...project.events, ev] };
-      return { ...project, events: insertSub(project.events, action.parentId, ev) };
-    }
-    case "deleteEvent":
-      return { ...project, events: mapEvents(project.events, (e) => (e.id === action.id ? null : e)) };
-    case "updateEvent":
-      return {
-        ...project,
-        events: mapEvents(project.events, (e) => (e.id === action.id ? { ...e, ...action.patch } : e)),
-      };
-    case "addInstruction":
-      return {
-        ...project,
-        events: mapEvents(project.events, (e) =>
-          e.id === action.eventId
-            ? { ...e, [action.slot]: [...e[action.slot], action.instruction] }
-            : e,
-        ),
-      };
-    case "updateInstruction":
-      return {
-        ...project,
-        events: mapEvents(project.events, (e) =>
-          e.id === action.eventId
-            ? {
-                ...e,
-                [action.slot]: e[action.slot].map((ins) =>
-                  ins.id === action.instructionId ? { ...ins, ...action.patch } : ins,
-                ),
-              }
-            : e,
-        ),
-      };
-    case "deleteInstruction":
-      return {
-        ...project,
-        events: mapEvents(project.events, (e) =>
-          e.id === action.eventId
-            ? { ...e, [action.slot]: e[action.slot].filter((i) => i.id !== action.instructionId) }
-            : e,
-        ),
-      };
-    default:
-      return project;
-  }
-}
-
-function reducer(state: State, action: Action): State {
-  switch (action.type) {
-    case "ui":
-      return { ...state, ui: { ...state.ui, ...action.patch } };
-    case "loadProject":
-      return { project: action.project, ui: initialUI, past: [], future: [] };
-    case "selectInstance": {
-      if (!action.id) return { ...state, ui: { ...state.ui, selectedInstanceIds: [] } };
-      const sel = action.additive
-        ? state.ui.selectedInstanceIds.includes(action.id)
-          ? state.ui.selectedInstanceIds.filter((i) => i !== action.id)
-          : [...state.ui.selectedInstanceIds, action.id]
-        : [action.id];
-      return { ...state, ui: { ...state.ui, selectedInstanceIds: sel, rightTab: "properties" } };
-    }
-    case "toggleCollapse":
-      return {
-        ...state,
-        project: projectReducer(state.project, {
-          type: "updateEvent",
-          id: action.id,
-          patch: {
-            collapsed: !findEvent(state.project.events, action.id)?.collapsed,
-          },
-        }),
-      };
-    case "undo": {
-      const prev = state.past[state.past.length - 1];
-      if (!prev) return state;
-      return {
-        ...state,
-        project: prev,
-        past: state.past.slice(0, -1),
-        future: [state.project, ...state.future].slice(0, 50),
-      };
-    }
-    case "redo": {
-      const next = state.future[0];
-      if (!next) return state;
-      return {
-        ...state,
-        project: next,
-        past: [...state.past, state.project].slice(-50),
-        future: state.future.slice(1),
-      };
-    }
-    default: {
-      const project = projectReducer(state.project, action);
-      if (project === state.project) return state;
-      const record = MUTATING.has(action.type) && action.type !== "moveInstance";
-      return {
-        ...state,
-        project,
-        past: record ? [...state.past, state.project].slice(-50) : state.past,
-        future: record ? [] : state.future,
-      };
-    }
-  }
+function siblingList(
+  events: GDEvent[],
+  parentId: string | null,
+  updater: (list: GDEvent[]) => GDEvent[],
+): GDEvent[] {
+  if (parentId === null) return updater(events);
+  return events.map((e) =>
+    e.id === parentId
+      ? { ...e, subEvents: updater(e.subEvents) }
+      : { ...e, subEvents: siblingList(e.subEvents, parentId, updater) },
+  );
 }
 
 export function findEvent(events: GDEvent[], id: string): GDEvent | undefined {
@@ -324,43 +374,1430 @@ export function findEvent(events: GDEvent[], id: string): GDEvent | undefined {
   return undefined;
 }
 
+export function parentOfEvent(
+  events: GDEvent[],
+  id: string,
+  parent: string | null = null,
+): string | null {
+  for (const e of events) {
+    if (e.id === id) return parent;
+    const found = parentOfEvent(e.subEvents, id, e.id);
+    if (found !== null) return found;
+  }
+  return null;
+}
+
+/* ------------------------------------------------------- variables in a tree */
+
+function variableAt(list: GDVariable[], path: string[]): GDVariable | undefined {
+  let current: GDVariable | undefined;
+  let level = list;
+  for (const name of path) {
+    current = level.find((v) => v.name === name);
+    if (!current) return undefined;
+    level = current.children;
+  }
+  return current;
+}
+
+function mapVariableTree(
+  list: GDVariable[],
+  path: string[],
+  updater: (v: GDVariable) => GDVariable,
+): GDVariable[] {
+  if (path.length === 0) return list.map(updater);
+  const [head, ...rest] = path;
+  return list.map((v) =>
+    v.name === head ? { ...v, children: mapVariableTree(v.children, rest, updater) } : v,
+  );
+}
+
+function removeVariable(list: GDVariable[], path: string[]): GDVariable[] {
+  if (path.length <= 1) {
+    const name = path[0];
+    return list.filter((v) => v.name !== name);
+  }
+  const [head, ...rest] = path;
+  return list.map((v) =>
+    v.name === head ? { ...v, children: removeVariable(v.children, rest) } : v,
+  );
+}
+
+function emptyVariableFor(parent: GDVariable | undefined): GDVariable {
+  const isIndex = parent?.type === "array";
+  const size = parent ? parent.children.length : 0;
+  return {
+    name: isIndex ? String(size) : `Variable ${size + 1}`,
+    type: "number",
+    value: "0",
+    children: [],
+  };
+}
+
+function sceneVariablesOf(scene: GDScene, location: VariableScopeLocation): GDVariable[] {
+  switch (location.scope) {
+    case "scene":
+      return scene.variables;
+    case "global":
+      return [];
+    case "object":
+      return scene.objects.find((o) => o.id === location.objectId)?.variables ?? [];
+    case "instance":
+      return scene.instances.find((i) => i.id === location.objectId)?.variables ?? [];
+  }
+}
+
+/* ----------------------------------------------------------------- reducer */
+
+const MUTATING = new Set([
+  "addObject",
+  "updateObject",
+  "renameObject",
+  "deleteObject",
+  "duplicateObject",
+  "setObjectGlobal",
+  "addObjectAnimation",
+  "updateObjectAnimation",
+  "deleteObjectAnimation",
+  "addObjectFrame",
+  "updateObjectFrame",
+  "deleteObjectFrame",
+  "addObjectPoint",
+  "updateObjectPoint",
+  "deleteObjectPoint",
+  "addBehavior",
+  "updateBehavior",
+  "deleteBehavior",
+  "addEffect",
+  "updateEffect",
+  "deleteEffect",
+  "moveEffect",
+  "toggleEffect",
+  "addInstance",
+  "addInstances",
+  "updateInstance",
+  "deleteInstances",
+  "duplicateInstances",
+  "setInstancesZOrder",
+  "toggleInstancesLock",
+  "toggleInstancesVisibility",
+  "addLayer",
+  "updateLayer",
+  "renameLayer",
+  "deleteLayer",
+  "moveLayer",
+  "toggleLayerVisibility",
+  "toggleLayerLock",
+  "setActiveLayer",
+  "addObjectGroup",
+  "updateObjectGroup",
+  "deleteObjectGroup",
+  "addVariable",
+  "updateVariable",
+  "deleteVariable",
+  "addVariableChild",
+  "addEvent",
+  "deleteEvent",
+  "deleteEvents",
+  "duplicateEvent",
+  "updateEvent",
+  "moveEvent",
+  "toggleEventDisabled",
+  "addInstruction",
+  "updateInstruction",
+  "deleteInstruction",
+  "moveInstruction",
+  "toggleInstructionInverted",
+  "addResource",
+  "updateResource",
+  "deleteResource",
+  "installExtension",
+  "uninstallExtension",
+  "addExternalEvents",
+  "addExternalLayout",
+  "updateGrid",
+  "updateScene",
+  "updateGameSettings",
+  "renameProject",
+  "addScene",
+  "deleteScene",
+  "renameScene",
+  "duplicateScene",
+]);
+
+function effectsOf(target: EffectTarget, scene: GDScene): GDEffect[] | undefined {
+  if (target.kind === "object") return scene.objects.find((o) => o.id === target.id)?.effects;
+  if (target.kind === "instance") return scene.instances.find((i) => i.id === target.id)?.effects;
+  return scene.layers.find((l) => l.name === target.name)?.effects;
+}
+
+function projectReducer(state: State, action: Action): State {
+  const project = state.project;
+  const scene = project.scenes.find((s) => s.name === state.activeSceneName) ?? project.scenes[0];
+  if (!scene) return state;
+
+  switch (action.type) {
+    /* ------------------------------------------------------------ project */
+    case "renameProject":
+      return { ...state, dirty: true, project: { ...project, name: action.name } };
+
+    case "updateGameSettings": {
+      const gameSettings = { ...project.gameSettings, ...action.patch };
+      let next = { ...project, gameSettings };
+      if (action.patch.startScene && action.patch.startScene !== project.firstLayoutName) {
+        next = { ...next, firstLayoutName: action.patch.startScene };
+      }
+      return { ...state, dirty: true, project: next };
+    }
+
+    /* ------------------------------------------------------------- scenes */
+    case "setActiveScene": {
+      const id = `scene:${action.name}`;
+      const exists = state.ui.openedTabs.some((t) => t.id === id);
+      const openedTabs = exists
+        ? state.ui.openedTabs
+        : [
+            ...state.ui.openedTabs,
+            { id, kind: "scene" as const, label: action.name, sceneName: action.name },
+          ];
+      return {
+        ...state,
+        activeSceneName: action.name,
+        ui: {
+          ...state.ui,
+          openedTabs,
+          activeTabId: id,
+          selectedInstanceIds: [],
+          selectedObjectIds: [],
+          selectedLayerName: null,
+          selectedGroupName: null,
+        },
+      };
+    }
+
+    case "addScene": {
+      const names = project.scenes.map((s) => s.name);
+      const name = action.name ?? newNameGenerator("Nueva escena", names);
+      const created = makeScene(name, {
+        backgroundColor: "255;255;255",
+        grid: { ...DEFAULT_GRID, show: true },
+      });
+      return {
+        ...state,
+        dirty: true,
+        project: { ...project, scenes: [...project.scenes, created] },
+        activeSceneName: name,
+        ui: {
+          ...state.ui,
+          openedTabs: [
+            ...state.ui.openedTabs,
+            { id: `scene:${name}`, kind: "scene", label: name, sceneName: name },
+          ],
+          activeTabId: `scene:${name}`,
+        },
+      };
+    }
+
+    case "deleteScene": {
+      if (project.scenes.length <= 1) return state;
+      const scenes = project.scenes.filter((s) => s.name !== action.name);
+      const first = scenes[0];
+      if (!first) return state;
+      const openedTabs = state.ui.openedTabs.filter((t) => t.sceneName !== action.name);
+      const activeSceneName =
+        state.activeSceneName === action.name ? first.name : state.activeSceneName;
+      return {
+        ...state,
+        dirty: true,
+        project: {
+          ...project,
+          scenes,
+          firstLayoutName: scenes.some((s) => s.name === project.firstLayoutName)
+            ? project.firstLayoutName
+            : first.name,
+        },
+        activeSceneName,
+        ui: {
+          ...state.ui,
+          openedTabs,
+          activeTabId:
+            state.activeSceneName === action.name ? `scene:${first.name}` : state.ui.activeTabId,
+        },
+      };
+    }
+
+    case "renameScene": {
+      if (!action.to.trim() || action.to === action.from) return state;
+      const renamed = renameSceneInProject(project, action.from, action.to.trim());
+      const openedTabs = state.ui.openedTabs.map((t) =>
+        t.sceneName === action.from
+          ? {
+              ...t,
+              label: action.to.trim(),
+              id: `scene:${action.to.trim()}`,
+              sceneName: action.to.trim(),
+            }
+          : t,
+      );
+      return {
+        ...state,
+        dirty: true,
+        project: renamed,
+        activeSceneName: action.to.trim(),
+        ui: {
+          ...state.ui,
+          openedTabs,
+          activeTabId:
+            state.activeSceneName === action.from
+              ? `scene:${action.to.trim()}`
+              : state.ui.activeTabId,
+        },
+      };
+    }
+
+    case "duplicateScene": {
+      const source = project.scenes.find((s) => s.name === action.name);
+      if (!source) return state;
+      const name = newNameGenerator(
+        `${source.name} (copia)`,
+        project.scenes.map((s) => s.name),
+      );
+      const idMap = new Map<string, string>();
+      const objects = source.objects.map((o) => {
+        const nextId = uid("obj");
+        idMap.set(o.id, nextId);
+        return { ...o, id: nextId };
+      });
+      const copy: GDScene = {
+        ...source,
+        name,
+        objects,
+        instances: source.instances.map((i) => ({
+          ...i,
+          id: uid("inst"),
+          objectId: idMap.get(i.objectId) ?? i.objectId,
+        })),
+        events: source.events.map(cloneEvent),
+      };
+      return {
+        ...state,
+        dirty: true,
+        project: { ...project, scenes: [...project.scenes, copy] },
+      };
+    }
+
+    case "updateScene":
+      return patchScene(state, (s) => ({ ...s, ...action.patch }));
+
+    case "updateGrid":
+      return patchScene(state, (s) => ({ ...s, grid: { ...s.grid, ...action.patch } }));
+
+    /* ------------------------------------------------------------ objects */
+    case "addObject": {
+      const id = action.object.id ?? uid("obj");
+      const created: GDObjectDef = {
+        behaviors: [],
+        effects: [],
+        variables: [],
+        ...action.object,
+        id,
+      };
+      return patchScene(state, (s) => ({ ...s, objects: [...s.objects, created] }));
+    }
+
+    case "updateObject":
+      return patchScene(state, (s) => ({
+        ...s,
+        objects: s.objects.map((o) => (o.id === action.id ? { ...o, ...action.patch } : o)),
+      }));
+
+    case "renameObject": {
+      const old = scene.objects.find((o) => o.id === action.id);
+      if (!old || old.name === action.name) return state;
+      const nextName = action.name.trim();
+      if (!nextName) return state;
+      return patchScene(state, (s) => ({
+        ...s,
+        objects: s.objects.map((o) => (o.id === action.id ? { ...o, name: nextName } : o)),
+        // GDevelop keeps the references in sync when an object is renamed.
+        events: mapEvents(s.events, (e) => renameObjectInEvent(e, old.name, nextName)),
+        groups: s.groups.map((g) => ({
+          ...g,
+          objects: g.objects.map((n) => (n === old.name ? nextName : n)),
+        })),
+      }));
+    }
+
+    case "deleteObject": {
+      const target = scene.objects.find((o) => o.id === action.id);
+      return patchScene(state, (s) => ({
+        ...s,
+        objects: s.objects.filter((o) => o.id !== action.id),
+        instances: s.instances.filter((i) => i.objectId !== action.id),
+        groups: s.groups.map((g) => ({
+          ...g,
+          objects: target ? g.objects.filter((n) => n !== target.name) : g.objects,
+        })),
+      }));
+    }
+
+    case "duplicateObject": {
+      const source = scene.objects.find((o) => o.id === action.id);
+      if (!source) return state;
+      const name = newNameGenerator(
+        `${source.name}Copy`,
+        scene.objects.map((o) => o.name),
+      );
+      const created: GDObjectDef = { ...source, id: uid("obj"), name };
+      return patchScene(state, (s) => ({ ...s, objects: [...s.objects, created] }));
+    }
+
+    case "setObjectGlobal":
+      return patchScene(state, (s) => ({
+        ...s,
+        objects: s.objects.map((o) =>
+          o.id === action.id ? { ...o, isGlobal: action.isGlobal } : o,
+        ),
+      }));
+
+    case "addObjectAnimation":
+      return patchScene(state, (s) => ({
+        ...s,
+        objects: s.objects.map((o) =>
+          o.id === action.objectId
+            ? {
+                ...o,
+                animations: [
+                  ...(o.animations ?? []),
+                  {
+                    name: newNameGenerator(
+                      "Animación",
+                      (o.animations ?? []).map((a) => a.name),
+                    ),
+                    loops: true,
+                    timeBetweenFrames: 1,
+                    images: [
+                      {
+                        image: o.asset ?? "",
+                        originX: 0,
+                        originY: 0,
+                        centerX: 0.5,
+                        centerY: 0.5,
+                        opacity: 255,
+                      },
+                    ],
+                    points: [],
+                  },
+                ],
+              }
+            : o,
+        ),
+      }));
+
+    case "updateObjectAnimation":
+      return patchScene(state, (s) => ({
+        ...s,
+        objects: s.objects.map((o) =>
+          o.id === action.objectId
+            ? {
+                ...o,
+                animations: (o.animations ?? []).map((a, i) =>
+                  i === action.index ? { ...a, ...action.patch } : a,
+                ),
+              }
+            : o,
+        ),
+      }));
+
+    case "deleteObjectAnimation":
+      return patchScene(state, (s) => ({
+        ...s,
+        objects: s.objects.map((o) =>
+          o.id === action.objectId
+            ? { ...o, animations: (o.animations ?? []).filter((_, i) => i !== action.index) }
+            : o,
+        ),
+      }));
+
+    case "addObjectFrame":
+      return patchScene(state, (s) => ({
+        ...s,
+        objects: s.objects.map((o) => {
+          if (o.id !== action.objectId) return o;
+          const animations = [...(o.animations ?? [])];
+          const current = animations[action.animationIndex];
+          if (!current) return o;
+          animations[action.animationIndex] = {
+            ...current,
+            images: [
+              ...current.images,
+              {
+                image: current.images[current.images.length - 1]?.image ?? o.asset ?? "",
+                originX: 0,
+                originY: 0,
+                centerX: 0.5,
+                centerY: 0.5,
+                opacity: 255,
+              },
+            ],
+          };
+          return { ...o, animations };
+        }),
+      }));
+
+    case "updateObjectFrame":
+      return patchScene(state, (s) => ({
+        ...s,
+        objects: s.objects.map((o) => {
+          if (o.id !== action.objectId) return o;
+          const animations = [...(o.animations ?? [])];
+          const current = animations[action.animationIndex];
+          if (!current) return o;
+          animations[action.animationIndex] = {
+            ...current,
+            images: current.images.map((f, i) =>
+              i === action.frameIndex ? { ...f, ...action.patch } : f,
+            ),
+          };
+          return { ...o, animations };
+        }),
+      }));
+
+    case "deleteObjectFrame":
+      return patchScene(state, (s) => ({
+        ...s,
+        objects: s.objects.map((o) => {
+          if (o.id !== action.objectId) return o;
+          const animations = [...(o.animations ?? [])];
+          const current = animations[action.animationIndex];
+          if (!current || current.images.length <= 1) return o;
+          animations[action.animationIndex] = {
+            ...current,
+            images: current.images.filter((_, i) => i !== action.frameIndex),
+          };
+          return { ...o, animations };
+        }),
+      }));
+
+    case "addObjectPoint":
+      return patchScene(state, (s) => ({
+        ...s,
+        objects: s.objects.map((o) => {
+          if (o.id !== action.objectId) return o;
+          const animations = [...(o.animations ?? [])];
+          const current = animations[action.animationIndex];
+          if (!current) return o;
+          animations[action.animationIndex] = {
+            ...current,
+            points: [
+              ...current.points,
+              {
+                name: newNameGenerator(
+                  "nuevoPunto",
+                  current.points.map((p) => p.name),
+                ),
+                x: 0,
+                y: 0,
+              },
+            ],
+          };
+          return { ...o, animations };
+        }),
+      }));
+
+    case "updateObjectPoint":
+      return patchScene(state, (s) => ({
+        ...s,
+        objects: s.objects.map((o) => {
+          if (o.id !== action.objectId) return o;
+          const animations = [...(o.animations ?? [])];
+          const current = animations[action.animationIndex];
+          if (!current) return o;
+          animations[action.animationIndex] = {
+            ...current,
+            points: current.points.map((p, i) =>
+              i === action.pointIndex ? { ...p, ...action.patch } : p,
+            ),
+          };
+          return { ...o, animations };
+        }),
+      }));
+
+    case "deleteObjectPoint":
+      return patchScene(state, (s) => ({
+        ...s,
+        objects: s.objects.map((o) => {
+          if (o.id !== action.objectId) return o;
+          const animations = [...(o.animations ?? [])];
+          const current = animations[action.animationIndex];
+          if (!current) return o;
+          animations[action.animationIndex] = {
+            ...current,
+            points: current.points.filter((_, i) => i !== action.pointIndex),
+          };
+          return { ...o, animations };
+        }),
+      }));
+
+    /* --------------------------------------------------- behaviors/effects */
+    case "addBehavior":
+      return patchScene(state, (s) => ({
+        ...s,
+        objects: s.objects.map((o) =>
+          o.id === action.objectId ? { ...o, behaviors: [...o.behaviors, action.behavior] } : o,
+        ),
+      }));
+
+    case "updateBehavior":
+      return patchScene(state, (s) => ({
+        ...s,
+        objects: s.objects.map((o) =>
+          o.id === action.objectId
+            ? {
+                ...o,
+                behaviors: o.behaviors.map((b) =>
+                  b.name === action.behaviorName ? { ...b, ...action.patch } : b,
+                ),
+              }
+            : o,
+        ),
+      }));
+
+    case "deleteBehavior":
+      return patchScene(state, (s) => ({
+        ...s,
+        objects: s.objects.map((o) =>
+          o.id === action.objectId
+            ? { ...o, behaviors: o.behaviors.filter((b) => b.name !== action.behaviorName) }
+            : o,
+        ),
+      }));
+
+    case "addEffect":
+      return patchScene(state, (s) =>
+        withEffects(s, action.target, (list) => [...list, action.effect]),
+      );
+
+    case "updateEffect":
+      return patchScene(state, (s) =>
+        withEffects(s, action.target, (list) =>
+          list.map((e, i) => (i === action.index ? { ...e, ...action.patch } : e)),
+        ),
+      );
+
+    case "deleteEffect":
+      return patchScene(state, (s) =>
+        withEffects(s, action.target, (list) => list.filter((_, i) => i !== action.index)),
+      );
+
+    case "moveEffect":
+      return patchScene(state, (s) =>
+        withEffects(s, action.target, (list) =>
+          swap(list, action.index, action.index + action.direction),
+        ),
+      );
+
+    case "toggleEffect":
+      return patchScene(state, (s) =>
+        withEffects(s, action.target, (list) =>
+          list.map((e, i) =>
+            i === action.index
+              ? {
+                  ...e,
+                  parameters: {
+                    ...e.parameters,
+                    disabled: e.parameters["disabled"] === "yes" ? "no" : "yes",
+                  },
+                }
+              : e,
+          ),
+        ),
+      );
+
+    /* ---------------------------------------------------------- instances */
+    case "addInstance": {
+      const obj = scene.objects.find((o) => o.id === action.objectId);
+      if (!obj) return state;
+      const isText = obj.type === "TextObject::Text" || obj.type === "Text";
+      const inst: GDInstance = {
+        id: uid("inst"),
+        objectId: obj.id,
+        x: Math.round(action.x),
+        y: Math.round(action.y),
+        angle: 0,
+        customSize: false,
+        width: isText ? 160 : 64,
+        height: isText ? 32 : 64,
+        zOrder: scene.instances.length + 1,
+        layer: action.layer ?? scene.activeLayer ?? BASE_LAYER_NAME,
+        locked: false,
+        hiddenAtStart: false,
+        variables: [],
+        effects: [],
+      };
+      return patchScene(state, (s) => ({ ...s, instances: [...s.instances, inst] }));
+    }
+
+    case "addInstances":
+      return patchScene(state, (s) => ({ ...s, instances: [...s.instances, ...action.instances] }));
+
+    case "moveInstances":
+      return patchScene(state, (s) => ({
+        ...s,
+        instances: s.instances.map((i) =>
+          action.ids.includes(i.id) ? { ...i, x: i.x + action.dx, y: i.y + action.dy } : i,
+        ),
+      }));
+
+    case "updateInstance":
+      return patchScene(state, (s) => ({
+        ...s,
+        instances: s.instances.map((i) => (i.id === action.id ? { ...i, ...action.patch } : i)),
+      }));
+
+    case "deleteInstances":
+      return patchScene(state, (s) => ({
+        ...s,
+        instances: s.instances.filter((i) => !action.ids.includes(i.id)),
+      }));
+
+    case "duplicateInstances": {
+      const copies = scene.instances
+        .filter((i) => action.ids.includes(i.id))
+        .map((i) => ({ ...i, id: uid("inst"), x: i.x + 20, y: i.y + 20, locked: false }));
+      if (copies.length === 0) return state;
+      return {
+        ...patchScene(state, (s) => ({ ...s, instances: [...s.instances, ...copies] })),
+        ui: { ...state.ui, selectedInstanceIds: copies.map((c) => c.id) },
+      };
+    }
+
+    case "setInstancesZOrder": {
+      const max = scene.instances.reduce((acc, i) => Math.max(acc, i.zOrder), 0);
+      const min = scene.instances.reduce((acc, i) => Math.min(acc, i.zOrder), 0);
+      return patchScene(state, (s) => ({
+        ...s,
+        instances: s.instances.map((i) =>
+          action.ids.includes(i.id)
+            ? {
+                ...i,
+                zOrder:
+                  action.mode === "front"
+                    ? max + 1
+                    : action.mode === "back"
+                      ? min - 1
+                      : (action.value ?? i.zOrder),
+              }
+            : i,
+        ),
+      }));
+    }
+
+    case "toggleInstancesLock":
+      return patchScene(state, (s) => ({
+        ...s,
+        instances: s.instances.map((i) =>
+          action.ids.includes(i.id) ? { ...i, locked: !i.locked } : i,
+        ),
+      }));
+
+    case "toggleInstancesVisibility":
+      return patchScene(state, (s) => ({
+        ...s,
+        instances: s.instances.map((i) =>
+          action.ids.includes(i.id) ? { ...i, hiddenAtStart: !i.hiddenAtStart } : i,
+        ),
+      }));
+
+    /* -------------------------------------------------------------- layers */
+    case "addLayer": {
+      const name =
+        action.name ??
+        newNameGenerator(
+          action.isLightingLayer ? "Capa de luz" : "Nueva capa",
+          scene.layers.map((l) => l.name),
+        );
+      return patchScene(state, (s) => ({
+        ...s,
+        layers: [
+          ...s.layers,
+          {
+            name,
+            visible: true,
+            camera: { x: 0, y: 0 },
+            effects: [],
+            ...(action.isLightingLayer === undefined
+              ? {}
+              : { isLightingLayer: action.isLightingLayer }),
+            followBaseLayer: !action.isLightingLayer && s.layers.length > 0,
+            ...(action.isLightingLayer ? { ambientLightColor: "180;180;180" } : {}),
+          },
+        ],
+      }));
+    }
+
+    case "updateLayer":
+      return patchScene(state, (s) => ({
+        ...s,
+        layers: s.layers.map((l) => (l.name === action.name ? { ...l, ...action.patch } : l)),
+      }));
+
+    case "renameLayer":
+      return patchScene(state, (s) => ({
+        ...s,
+        layers: s.layers.map((l) => (l.name === action.from ? { ...l, name: action.to } : l)),
+        instances: s.instances.map((i) =>
+          i.layer === action.from ? { ...i, layer: action.to } : i,
+        ),
+        activeLayer: s.activeLayer === action.from ? action.to : s.activeLayer,
+      }));
+
+    case "deleteLayer":
+      return patchScene(state, (s) => ({
+        ...s,
+        layers: s.layers.filter((l) => l.name !== action.name),
+        instances: s.instances.filter((i) => i.layer !== action.name),
+      }));
+
+    case "moveLayer":
+      return patchScene(state, (s) => ({
+        ...s,
+        layers: swap(
+          s.layers,
+          s.layers.findIndex((l) => l.name === action.name),
+          s.layers.findIndex((l) => l.name === action.name) + action.direction,
+        ),
+      }));
+
+    case "toggleLayerVisibility":
+      return patchScene(state, (s) => ({
+        ...s,
+        layers: s.layers.map((l) => (l.name === action.name ? { ...l, visible: !l.visible } : l)),
+      }));
+
+    case "toggleLayerLock":
+      return patchScene(state, (s) => ({
+        ...s,
+        layers: s.layers.map((l) => (l.name === action.name ? { ...l, locked: !l.locked } : l)),
+      }));
+
+    case "setActiveLayer":
+      return patchScene(state, (s) => ({ ...s, activeLayer: action.name }));
+
+    /* -------------------------------------------------------------- groups */
+    case "addObjectGroup": {
+      const name =
+        action.name ??
+        newNameGenerator(
+          "Nuevo grupo",
+          scene.groups.map((g) => g.name),
+        );
+      return patchScene(state, (s) => ({
+        ...s,
+        groups: [...s.groups, { name, objects: [], behaviors: [] }],
+      }));
+    }
+
+    case "updateObjectGroup":
+      return patchScene(state, (s) => ({
+        ...s,
+        groups: s.groups.map((g) =>
+          g.name === action.name
+            ? { ...g, ...action.patch, name: action.patch.name?.trim() || g.name }
+            : g,
+        ),
+      }));
+
+    case "deleteObjectGroup":
+      return patchScene(state, (s) => ({
+        ...s,
+        groups: s.groups.filter((g) => g.name !== action.name),
+      }));
+
+    /* ----------------------------------------------------------- variables */
+    case "addVariable": {
+      const list =
+        action.location.scope === "global"
+          ? project.globalVariables
+          : sceneVariablesOf(scene, action.location);
+      const parent =
+        action.location.path && action.location.path.length > 0
+          ? variableAt(list, action.location.path)
+          : undefined;
+      const created = emptyVariableFor(parent);
+      const nextList =
+        parent === undefined
+          ? [
+              ...list,
+              {
+                ...created,
+                name: newNameGenerator(
+                  "Variable",
+                  list.map((v) => v.name),
+                ),
+              },
+            ]
+          : mapVariableTree(list, action.location.path!, (v) =>
+              v === parent ? { ...v, type: "structure", children: [...v.children, created] } : v,
+            );
+      return writeVariableList(state, action.location, nextList);
+    }
+
+    case "addVariableChild": {
+      const list =
+        action.location.scope === "global"
+          ? project.globalVariables
+          : sceneVariablesOf(scene, action.location);
+      const parent = variableAt(list, action.path);
+      if (!parent) return state;
+      const created = emptyVariableFor(parent);
+      const nextList = mapVariableTree(list, action.path, (v) =>
+        v === parent ? { ...v, type: "structure", children: [...v.children, created] } : v,
+      );
+      return writeVariableList(state, action.location, nextList);
+    }
+
+    case "updateVariable": {
+      const list =
+        action.location.scope === "global"
+          ? project.globalVariables
+          : sceneVariablesOf(scene, action.location);
+      const target = variableAt(list, action.path);
+      if (!target) return state;
+      // Renaming must produce a new object so siblings keep their order.
+      const nextList = mapVariableTree(list, action.path, (v) => {
+        if (v !== target) return v;
+        const patch = { ...action.patch };
+        if (patch.type && patch.type !== "number" && patch.type !== "string" && v.value === "0") {
+          patch.value = patch.type === "boolean" ? "false" : "";
+        }
+        return { ...v, ...patch };
+      });
+      return writeVariableList(state, action.location, nextList);
+    }
+
+    case "deleteVariable": {
+      const list =
+        action.location.scope === "global"
+          ? project.globalVariables
+          : sceneVariablesOf(scene, action.location);
+      const nextList = removeVariable(list, action.path);
+      return writeVariableList(state, action.location, nextList);
+    }
+
+    /* --------------------------------------------------------------- events */
+    case "addEvent": {
+      const ev = newEvent(action.kind);
+      return patchScene(state, (s) => ({
+        ...s,
+        events:
+          action.parentId === null ? [...s.events, ev] : insertSub(s.events, action.parentId, ev),
+      }));
+    }
+
+    case "deleteEvent":
+    case "deleteEvents": {
+      // cleared below
+      const ids = action.type === "deleteEvent" ? [action.id] : action.ids;
+      return patchScene(state, (s) => ({
+        ...s,
+        events: mapEvents(s.events, (e) => (ids.includes(e.id) ? null : e)),
+      }));
+    }
+
+    case "duplicateEvent": {
+      const source = findEvent(scene.events, action.id);
+      if (!source) return state;
+      const copy = cloneEvent(source);
+      const parentId = parentOfEvent(scene.events, action.id);
+      return patchScene(state, (s) => ({
+        ...s,
+        events: siblingList(s.events, parentId, (list) => {
+          const index = list.findIndex((e) => e.id === action.id);
+          const next = [...list];
+          next.splice(index + 1, 0, copy);
+          return next;
+        }),
+      }));
+    }
+
+    case "toggleCollapse":
+      return patchScene(state, (s) => ({
+        ...s,
+        events: mapEvents(s.events, (e) =>
+          e.id === action.id ? { ...e, collapsed: !e.collapsed } : e,
+        ),
+      }));
+
+    case "toggleEventDisabled":
+      return patchScene(state, (s) => ({
+        ...s,
+        events: mapEvents(s.events, (e) =>
+          e.id === action.id ? { ...e, disabled: !e.disabled } : e,
+        ),
+      }));
+
+    case "updateEvent":
+      return patchScene(state, (s) => ({
+        ...s,
+        events: mapEvents(s.events, (e) => (e.id === action.id ? { ...e, ...action.patch } : e)),
+      }));
+
+    case "moveEvent": {
+      const parentId = parentOfEvent(scene.events, action.id);
+      return patchScene(state, (s) => ({
+        ...s,
+        events: siblingList(s.events, parentId, (list) =>
+          swap(
+            list,
+            list.findIndex((e) => e.id === action.id),
+            list.findIndex((e) => e.id === action.id) + action.direction,
+          ),
+        ),
+      }));
+    }
+
+    case "addInstruction":
+      return patchScene(state, (s) => ({
+        ...s,
+        events: mapEvents(s.events, (e) =>
+          e.id === action.eventId
+            ? { ...e, [action.slot]: [...e[action.slot], action.instruction] }
+            : e,
+        ),
+      }));
+
+    case "toggleInstructionInverted":
+      return patchScene(state, (s) => ({
+        ...s,
+        events: mapEvents(s.events, (e) =>
+          e.id === action.eventId
+            ? {
+                ...e,
+                [action.slot]: e[action.slot].map((ins) =>
+                  ins.id === action.instructionId ? { ...ins, inverted: !ins.inverted } : ins,
+                ),
+              }
+            : e,
+        ),
+      }));
+
+    case "updateInstruction":
+      return patchScene(state, (s) => ({
+        ...s,
+        events: mapEvents(s.events, (e) =>
+          e.id === action.eventId
+            ? {
+                ...e,
+                [action.slot]: e[action.slot].map((ins) =>
+                  ins.id === action.instructionId ? { ...ins, ...action.patch } : ins,
+                ),
+              }
+            : e,
+        ),
+      }));
+
+    case "deleteInstruction":
+      return patchScene(state, (s) => ({
+        ...s,
+        events: mapEvents(s.events, (e) =>
+          e.id === action.eventId
+            ? { ...e, [action.slot]: e[action.slot].filter((i) => i.id !== action.instructionId) }
+            : e,
+        ),
+      }));
+
+    case "moveInstruction":
+      return patchScene(state, (s) => ({
+        ...s,
+        events: mapEvents(s.events, (e) => {
+          if (e.id !== action.eventId) return e;
+          const index = e[action.slot].findIndex((i) => i.id === action.instructionId);
+          return { ...e, [action.slot]: swap(e[action.slot], index, index + action.direction) };
+        }),
+      }));
+
+    /* ------------------------------------------------------------ resources */
+    case "addResource":
+      return {
+        ...state,
+        dirty: true,
+        project: {
+          ...project,
+          resources: [
+            ...project.resources,
+            project.resources.some((r) => r.name === action.resource.name)
+              ? {
+                  ...action.resource,
+                  name: newNameGenerator(
+                    action.resource.name,
+                    project.resources.map((r) => r.name),
+                  ),
+                }
+              : action.resource,
+          ],
+        },
+      };
+
+    case "updateResource":
+      return {
+        ...state,
+        dirty: true,
+        project: {
+          ...project,
+          resources: project.resources.map((r) =>
+            r.name === action.name ? { ...r, ...action.patch } : r,
+          ),
+        },
+      };
+
+    case "deleteResource":
+      return {
+        ...state,
+        dirty: true,
+        project: { ...project, resources: project.resources.filter((r) => r.name !== action.name) },
+      };
+
+    /* ------------------------------------------------------------ extensions */
+    case "installExtension":
+      if (project.extensions.some((e) => e.name === action.extension.name)) return state;
+      return {
+        ...state,
+        dirty: true,
+        project: { ...project, extensions: [...project.extensions, action.extension] },
+      };
+
+    case "uninstallExtension":
+      return {
+        ...state,
+        dirty: true,
+        project: {
+          ...project,
+          extensions: project.extensions.filter((e) => e.name !== action.name),
+        },
+      };
+
+    case "addExternalEvents": {
+      const name =
+        action.name ??
+        newNameGenerator(
+          "Nueva lista de eventos",
+          project.externalEvents.map((e) => e.name),
+        );
+      return {
+        ...state,
+        dirty: true,
+        project: { ...project, externalEvents: [...project.externalEvents, { name, events: [] }] },
+      };
+    }
+
+    case "addExternalLayout": {
+      const name =
+        action.name ??
+        newNameGenerator(
+          "Nuevo diseño",
+          project.externalLayouts.map((l) => l.name),
+        );
+      return {
+        ...state,
+        dirty: true,
+        project: {
+          ...project,
+          externalLayouts: [...project.externalLayouts, { name, instances: [] }],
+        },
+      };
+    }
+
+    default:
+      return state;
+  }
+}
+
+function writeVariableList(
+  state: State,
+  location: VariableScopeLocation,
+  list: GDVariable[],
+): State {
+  if (location.scope === "global") {
+    return {
+      ...state,
+      dirty: true,
+      project: { ...state.project, globalVariables: list },
+    };
+  }
+  return patchScene(state, (s) => {
+    if (location.scope === "scene") return { ...s, variables: list };
+    if (location.scope === "object") {
+      return {
+        ...s,
+        objects: s.objects.map((o) => (o.id === location.objectId ? { ...o, variables: list } : o)),
+      };
+    }
+    return {
+      ...s,
+      instances: s.instances.map((i) =>
+        i.id === location.objectId ? { ...i, variables: list } : i,
+      ),
+    };
+  });
+}
+
+function swap<T>(list: T[], from: number, to: number): T[] {
+  if (from < 0 || to < 0 || from >= list.length || to >= list.length) return list;
+  const a = list[from];
+  const b = list[to];
+  if (a === undefined || b === undefined) return list;
+  const next = [...list];
+  next[from] = b;
+  next[to] = a;
+  return next;
+}
+
+/** Applies an effects-list update on the layer/object/instance that owns the list. */
+function withEffects(
+  scene: GDScene,
+  target: EffectTarget,
+  updater: (list: GDEffect[]) => GDEffect[],
+): GDScene {
+  if (target.kind === "object") {
+    return {
+      ...scene,
+      objects: scene.objects.map((o) =>
+        o.id === target.id ? { ...o, effects: updater(o.effects) } : o,
+      ),
+    };
+  }
+  if (target.kind === "instance") {
+    return {
+      ...scene,
+      instances: scene.instances.map((i) =>
+        i.id === target.id ? { ...i, effects: updater(i.effects) } : i,
+      ),
+    };
+  }
+  return {
+    ...scene,
+    layers: scene.layers.map((l) =>
+      l.name === target.name ? { ...l, effects: updater(l.effects) } : l,
+    ),
+  };
+}
+
+function renameObjectInEvent(event: GDEvent, from: string, to: string): GDEvent {
+  const fix = (list: GDInstruction[]) =>
+    list.map((i) => {
+      const parameters = { ...i.parameters };
+      for (const key of Object.keys(parameters)) {
+        if (parameters[key] === from) parameters[key] = to;
+      }
+      return { ...i, parameters };
+    });
+  return {
+    ...event,
+    conditions: fix(event.conditions),
+    actions: fix(event.actions),
+    subEvents: event.subEvents.map((s) => renameObjectInEvent(s, from, to)),
+  };
+}
+
+export function cloneEvent(event: GDEvent): GDEvent {
+  return {
+    ...event,
+    id: uid("ev"),
+    conditions: event.conditions.map((c) => ({
+      ...c,
+      id: uid("in"),
+      parameters: { ...c.parameters },
+    })),
+    actions: event.actions.map((a) => ({ ...a, id: uid("in"), parameters: { ...a.parameters } })),
+    subEvents: event.subEvents.map(cloneEvent),
+  };
+}
+
+/* ------------------------------------------------------------------ store */
+
+function reducer(state: State, action: Action): State {
+  switch (action.type) {
+    case "ui":
+      return { ...state, ui: { ...state.ui, ...action.patch } };
+
+    case "openDialog":
+      return { ...state, ui: { ...state.ui, dialog: action.dialog } };
+
+    case "closeDialog":
+      return { ...state, ui: { ...state.ui, dialog: null } };
+
+    case "markSaved":
+      return { ...state, dirty: false };
+
+    case "selectEvents":
+      return { ...state, ui: { ...state.ui, selectedEventIds: action.ids } };
+
+    case "openTab": {
+      const id = action.tab.id ?? `${action.tab.kind}:${action.tab.label}`;
+      const exists = state.ui.openedTabs.some((t) => t.id === id);
+      const openedTabs = exists
+        ? state.ui.openedTabs
+        : [...state.ui.openedTabs, { ...action.tab, id }];
+      const activeSceneName =
+        action.tab.kind === "scene" && action.tab.sceneName
+          ? action.tab.sceneName
+          : state.activeSceneName;
+      return {
+        ...state,
+        activeSceneName,
+        ui: { ...state.ui, openedTabs, activeTabId: id },
+      };
+    }
+
+    case "closeTab": {
+      const index = state.ui.openedTabs.findIndex((t) => t.id === action.id);
+      if (index === -1) return state;
+      const openedTabs = state.ui.openedTabs.filter((t) => t.id !== action.id);
+      let activeTabId = state.ui.activeTabId;
+      let activeSceneName = state.activeSceneName;
+      if (state.ui.activeTabId === action.id) {
+        const next = openedTabs[Math.max(0, index - 1)];
+        activeTabId = next?.id ?? "";
+        if (next?.sceneName) activeSceneName = next.sceneName;
+      }
+      return { ...state, activeSceneName, ui: { ...state.ui, openedTabs, activeTabId } };
+    }
+
+    case "setActiveTab": {
+      const tab = state.ui.openedTabs.find((t) => t.id === action.id);
+      if (!tab) return state;
+      return {
+        ...state,
+        activeSceneName: tab.sceneName ?? state.activeSceneName,
+        ui: { ...state.ui, activeTabId: action.id },
+      };
+    }
+
+    case "loadProject": {
+      const migrated = migrateProject(action.project) ?? createDemoProject();
+      const first = migrated.scenes[0]?.name ?? "Level 1";
+      return {
+        project: migrated,
+        activeSceneName: first,
+        ui: {
+          ...initialUI,
+          openedTabs: [{ id: `scene:${first}`, kind: "scene", label: first, sceneName: first }],
+          activeTabId: `scene:${first}`,
+        },
+        past: [],
+        future: [],
+        dirty: false,
+      };
+    }
+
+    case "undo": {
+      const prev = state.past[state.past.length - 1];
+      if (!prev) return state;
+      return {
+        ...state,
+        project: prev.project,
+        activeSceneName: prev.sceneName,
+        past: state.past.slice(0, -1),
+        future: [
+          { project: state.project, sceneName: state.activeSceneName },
+          ...state.future,
+        ].slice(0, 60),
+        dirty: true,
+      };
+    }
+
+    case "redo": {
+      const next = state.future[0];
+      if (!next) return state;
+      return {
+        ...state,
+        project: next.project,
+        activeSceneName: next.sceneName,
+        past: [...state.past, { project: state.project, sceneName: state.activeSceneName }].slice(
+          -60,
+        ),
+        future: state.future.slice(1),
+        dirty: true,
+      };
+    }
+
+    default: {
+      const nextProject = projectReducer(state, action);
+      if (nextProject === state) return state;
+      const changed = nextProject.project !== state.project || nextProject.ui !== state.ui;
+      if (!changed) return state;
+      const record = MUTATING.has(action.type) && action.type !== "moveInstances";
+      return {
+        ...nextProject,
+        past: record
+          ? [...state.past, { project: state.project, sceneName: state.activeSceneName }].slice(-60)
+          : nextProject.past,
+        future: record ? [] : nextProject.future,
+      };
+    }
+  }
+}
+
+/** Zoom limits from GDevelop's `Utils/ZoomUtils.js`. */
+export const MIN_ZOOM = 1 / 128;
+export const MAX_ZOOM = 128;
+export const clampZoom = (zoom: number) => Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom));
+
 interface Ctx {
   state: State;
   project: GDProject;
+  scene: GDScene;
+  activeSceneName: string;
+  /** kind of the document tab currently focused ("scene" | "home" | ...) */
+  activeTabKind: OpenedTabKind;
   ui: UIState;
   dispatch: React.Dispatch<Action>;
   canUndo: boolean;
   canRedo: boolean;
+  dirty: boolean;
 }
 
 const EditorContext = React.createContext<Ctx | null>(null);
 
 export function EditorProvider({ children }: { children: React.ReactNode }) {
-  const [state, dispatch] = React.useReducer(reducer, undefined, () => ({
-    project: createDemoProject(),
-    ui: initialUI,
-    past: [],
-    future: [],
-  }));
+  const [state, dispatch] = React.useReducer(reducer, undefined, () => {
+    const project = createDemoProject();
+    return {
+      project,
+      activeSceneName: project.scenes[0]?.name ?? "Level 1",
+      ui: initialUI,
+      past: [],
+      future: [],
+      dirty: false,
+    };
+  });
 
-  // Carga el proyecto seleccionado desde Inicio (Drive o dispositivo) tras hidratar.
+  // Load the project picked from the home screen (Drive or device) after hydration.
   React.useEffect(() => {
     const current = getCurrentProject();
     if (current?.project) {
-      dispatch({ type: "loadProject", project: current.project });
+      dispatch({ type: "loadProject", project: current.project as GDProject });
     }
   }, []);
 
+  const activeTab = state.ui.openedTabs.find((tab) => tab.id === state.ui.activeTabId);
   const value = React.useMemo<Ctx>(
     () => ({
       state,
       project: state.project,
+      scene:
+        state.project.scenes.find((s) => s.name === state.activeSceneName) ??
+        state.project.scenes[0]!,
+      activeSceneName: state.activeSceneName,
+      activeTabKind: activeTab?.kind ?? "scene",
       ui: state.ui,
       dispatch,
       canUndo: state.past.length > 0,
       canRedo: state.future.length > 0,
+      dirty: state.dirty,
     }),
-    [state],
+    [state, activeTab],
   );
 
   return <EditorContext.Provider value={value}>{children}</EditorContext.Provider>;
@@ -371,3 +1808,15 @@ export function useEditor() {
   if (!ctx) throw new Error("useEditor must be used inside EditorProvider");
   return ctx;
 }
+
+export type {
+  GDScene,
+  GDProject,
+  GDObjectDef,
+  GDInstance,
+  GDEvent,
+  GDInstruction,
+  GDVariable,
+  GDEffect,
+  GDObjectBehavior,
+};

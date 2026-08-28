@@ -1,106 +1,233 @@
+// "Elegir un tipo de objeto" — GDevelop's object type picker: search + the list of
+// object types (from the installed extensions), a description pane, and the object
+// name. Creating a Sprite or a Text object opens its editor right away.
+
 import * as React from "react";
-import {
-  X,
-  Search,
-  Image as ImageIcon,
-  LayoutGrid,
-  Square,
-  Type,
-  Sparkles,
-  PenTool,
-  Video,
-  Grid2x2,
-  MousePointerClick,
-  CircleDot,
-  Boxes,
-} from "lucide-react";
-import { uid } from "@/lib/editor/data";
+import { Search } from "lucide-react";
 import { useEditor } from "@/lib/editor/store";
+import {
+  OBJECT_TYPES,
+  isSpriteLike,
+  isTextLike,
+  objectTypeId,
+  resolveAsset,
+} from "@/lib/editor/catalog";
+import { newNameGenerator } from "@/lib/editor/ids";
+import { S } from "@/lib/editor/i18n";
+import { cn } from "@/lib/utils";
+import { GdButton, GdDialog, SearchBar } from "./gd/kit";
+import { CatalogIcon } from "./gd/icons";
 
-const TYPES = [
-  { name: "Sprite", desc: "Animated object which can be moved and rotated", icon: ImageIcon },
-  { name: "Tiled Sprite", desc: "Displays an image repeated over an area", icon: LayoutGrid },
-  { name: "Panel Sprite", desc: "Also known as 9-patch, for panels and buttons", icon: Square },
-  { name: "Text", desc: "Displays a text on the screen", icon: Type },
-  { name: "BBText", desc: "Rich text with formatting tags", icon: Type },
-  { name: "Bitmap Text", desc: "Text using a bitmap font", icon: Type },
-  { name: "Particle Emitter", desc: "Displays a large number of particles", icon: Sparkles },
-  { name: "Shape Painter", desc: "Draw simple shapes on the screen", icon: PenTool },
-  { name: "Video", desc: "Displays a video on the screen", icon: Video },
-  { name: "Tilemap", desc: "Displays a tile-based map", icon: Grid2x2 },
-  { name: "Button", desc: "A clickable button with states", icon: MousePointerClick },
-  { name: "Light", desc: "Displays a light on the scene", icon: CircleDot },
-  { name: "3D Box", desc: "A 3D box object", icon: Boxes },
-];
-
-export function NewObjectDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { dispatch } = useEditor();
+export function NewObjectDialog() {
+  const { scene, project, dispatch, ui } = useEditor();
+  const open = ui.dialog?.name === "newObject";
   const [query, setQuery] = React.useState("");
-  if (!open) return null;
+  const [selectedId, setSelectedId] = React.useState<string>(OBJECT_TYPES[0]?.typeId ?? "Sprite");
+  const [autoName, setAutoName] = React.useState(true);
+  const [name, setName] = React.useState("");
 
-  const list = TYPES.filter((t) => t.name.toLowerCase().includes(query.toLowerCase()));
+  const selected = OBJECT_TYPES.find((type) => type.typeId === selectedId) ?? OBJECT_TYPES[0];
+  const taken = scene.objects.map((object) => object.name);
+  const suggested = selected ? newNameGenerator(sanitizeName(selected.name), taken) : "Objeto";
+  const finalName = (name.trim() || suggested).trim();
 
-  const add = (type: string) => {
-    const id = uid("obj");
+  React.useEffect(() => {
+    if (!open) {
+      setQuery("");
+      setName("");
+      setAutoName(true);
+      setSelectedId(OBJECT_TYPES[0]?.typeId ?? "Sprite");
+    }
+  }, [open]);
+
+  const results = OBJECT_TYPES.filter(
+    (type) =>
+      !query ||
+      type.name.toLowerCase().includes(query.toLowerCase()) ||
+      type.description.toLowerCase().includes(query.toLowerCase()),
+  );
+
+  const create = () => {
+    if (!selected) return;
+    const resources = project.resources.filter((resource) => resource.kind === "image");
+    const firstImage = resources[0]?.name;
+    const id = `obj-${Math.random().toString(36).slice(2, 9)}`;
     dispatch({
       type: "addObject",
       object: {
         id,
-        name: `New${type.replace(/\s/g, "")}`,
-        type,
+        name: finalName,
+        type: objectTypeId(selected.typeId),
+        ...(isSpriteLike(selected.typeId) && firstImage ? { asset: firstImage } : {}),
+        ...(isSpriteLike(selected.typeId)
+          ? {
+              animations: [
+                {
+                  name: "Idle",
+                  images: firstImage
+                    ? [
+                        {
+                          image: firstImage,
+                          originX: 0,
+                          originY: 0,
+                          centerX: 0,
+                          centerY: 0,
+                          opacity: 255,
+                        },
+                      ]
+                    : [],
+                  timeBetweenFrames: 0,
+                  loops: true,
+                  points: [],
+                },
+              ],
+            }
+          : {}),
+        ...(isTextLike(selected.typeId)
+          ? { text: "Texto", textSize: 32, textColor: "250;250;250", alignment: "left" as const }
+          : {}),
         behaviors: [],
+        effects: [],
         variables: [],
-        ...(type === "Text" ? { text: "Text", textColor: "#FAFAFA", textSize: 24 } : {}),
       },
     });
-    onClose();
+    dispatch({ type: "closeDialog" });
+    if (isSpriteLike(selected.typeId) || isTextLike(selected.typeId)) {
+      dispatch({ type: "openDialog", dialog: { name: "objectEditor", objectId: id } });
+    }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="flex max-h-[80vh] w-full max-w-3xl flex-col rounded-lg border border-separator bg-toolbar shadow-2xl">
-        <div className="flex items-center justify-between border-b border-separator px-4 py-3">
-          <h2 className="text-sm font-semibold">Add a new object</h2>
-          <button
-            type="button"
-            aria-label="Close"
-            onClick={onClose}
-            className="rounded p-1 text-muted-foreground hover:bg-elevated hover:text-foreground"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="border-b border-separator p-3">
-          <div className="flex items-center gap-2 rounded bg-elevated px-2 py-1.5">
-            <Search className="h-3.5 w-3.5 text-muted-foreground" />
+    <GdDialog
+      open={open}
+      onClose={() => dispatch({ type: "closeDialog" })}
+      title={S.addObjectSearch}
+      width="max-w-3xl"
+      footer={
+        <>
+          <GdButton onClick={() => dispatch({ type: "closeDialog" })}>{S.cancel}</GdButton>
+          <GdButton variant="raised" primary disabled={!selected} onClick={create}>
+            {`Crear un objeto «${selected?.name ?? ""}»`}
+          </GdButton>
+        </>
+      }
+    >
+      <div className="grid md:grid-cols-[minmax(0,1fr)_260px]">
+        <div className="border-b border-separator md:border-b-0 md:border-r">
+          <div className="flex items-center gap-2 border-b border-separator px-2 py-1.5">
+            <Search className="h-3.5 w-3.5 shrink-0 text-text-secondary" />
             <input
               autoFocus
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search a new object type"
-              className="w-full bg-transparent text-[13px] outline-none placeholder:text-muted-foreground"
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={S.addObjectSearch}
+              className="h-7 w-full min-w-0 bg-transparent text-[12.5px] outline-none placeholder:text-text-placeholder"
             />
           </div>
-        </div>
-        <div className="grid flex-1 grid-cols-1 gap-2 overflow-y-auto p-3 sm:grid-cols-2 lg:grid-cols-3">
-          {list.map((t) => (
-            <button
-              key={t.name}
-              type="button"
-              onClick={() => add(t.name)}
-              className="flex items-start gap-2.5 rounded border border-separator bg-elevated p-3 text-left transition-colors hover:border-primary hover:bg-selection"
-            >
-              <t.icon className="mt-0.5 h-5 w-5 shrink-0 text-link" />
-              <span>
-                <span className="block text-[13px] font-medium">{t.name}</span>
-                <span className="mt-0.5 block text-[11.5px] leading-snug text-muted-foreground">
-                  {t.desc}
+          <div className="max-h-[46vh] overflow-y-auto">
+            {results.map((type) => (
+              <button
+                key={type.typeId}
+                type="button"
+                onClick={() => setSelectedId(type.typeId)}
+                onDoubleClick={create}
+                className={cn(
+                  "flex w-full items-center gap-2 border-b border-separator/60 px-2.5 py-2 text-left hover:bg-list-hover",
+                  selectedId === type.typeId && "bg-[#3D4D51]",
+                )}
+              >
+                <CatalogIcon
+                  name={type.icon}
+                  className={cn(
+                    "h-5 w-5 shrink-0",
+                    selectedId === type.typeId ? "text-[#E5C07B]" : "text-[#C9B6FC]",
+                  )}
+                />
+                <span className="min-w-0 flex-1">
+                  <span
+                    className={cn(
+                      "block truncate text-[13px]",
+                      selectedId === type.typeId ? "text-[#E5C07B]" : "text-foreground",
+                    )}
+                  >
+                    {type.name}
+                  </span>
+                  <span className="block truncate text-[11px] text-text-secondary">
+                    {type.description}
+                  </span>
                 </span>
-              </span>
-            </button>
-          ))}
+                {type.installable ? (
+                  <span className="shrink-0 rounded bg-elevated px-1 text-[10px] text-text-secondary">
+                    extensión
+                  </span>
+                ) : null}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="p-3">
+          <label className="block text-[11px] uppercase tracking-wide text-text-secondary">
+            {S.name}
+          </label>
+          <div className="mt-1 flex items-center gap-1">
+            <input
+              value={autoName ? suggested : name}
+              onChange={(event) => {
+                setAutoName(false);
+                setName(event.target.value);
+              }}
+              className={cn(
+                "h-8 min-w-0 flex-1 rounded border px-2 text-[12.5px] outline-none",
+                taken.includes(finalName)
+                  ? "border-[#FE6C46] bg-[rgba(254,108,70,0.15)]"
+                  : "border-separator bg-[#1D1D26] focus:border-[var(--brand-light)]",
+              )}
+            />
+            {autoName ? null : (
+              <button
+                type="button"
+                onClick={() => {
+                  setAutoName(true);
+                  setName("");
+                }}
+                className="h-8 shrink-0 rounded px-1.5 text-[11px] text-text-secondary hover:bg-elevated"
+                title="Usar el nombre sugerido"
+              >
+                auto
+              </button>
+            )}
+          </div>
+          {taken.includes(finalName) ? (
+            <p className="mt-1 text-[11px] text-[#FFB4A2]">Ya existe un objeto con este nombre.</p>
+          ) : null}
+
+          {selected ? (
+            <>
+              <div className="mt-3 flex h-24 items-center justify-center rounded border border-separator bg-[#101017]">
+                {isSpriteLike(selected.typeId) && project.resources[0] ? (
+                  <img
+                    src={resolveAsset(project.resources[0].file) ?? project.resources[0].file}
+                    alt=""
+                    className="max-h-20 max-w-full object-contain [image-rendering:pixelated]"
+                  />
+                ) : (
+                  <CatalogIcon name={selected.icon} className="h-9 w-9 text-[#C9B6FC]" />
+                )}
+              </div>
+              <p className="mt-2 text-[12px] leading-snug text-text-secondary">
+                {selected.description}
+              </p>
+            </>
+          ) : null}
         </div>
       </div>
-    </div>
+    </GdDialog>
   );
 }
+
+const sanitizeName = (label: string) =>
+  label
+    .replace(/[^\p{L}\p{N}]+/gu, "")
+    .slice(0, 24)
+    .replace(/^./, (first) => first.toUpperCase());

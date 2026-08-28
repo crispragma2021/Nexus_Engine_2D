@@ -7,13 +7,13 @@ export const Route = createFileRoute("/auth")({
   ssr: false,
   head: () => ({
     meta: [
-      { title: "Iniciar sesión · GDevelop Design Guru" },
+      { title: "Iniciar sesión · Nexus Engine" },
       {
         name: "description",
         content:
           "Inicia sesión para acceder a tus proyectos y a las herramientas de agente (MCP) del estudio.",
       },
-      { property: "og:title", content: "Iniciar sesión · GDevelop Design Guru" },
+      { property: "og:title", content: "Iniciar sesión · Nexus Engine" },
       {
         property: "og:description",
         content: "Accede con correo o Google al estudio de creación de juegos.",

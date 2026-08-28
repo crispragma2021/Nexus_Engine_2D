@@ -1,519 +1,747 @@
+// Properties panel — GDevelop's `PropertiesEditor` for whatever is selected:
+// an instance (position, size, angle, Z, layer, opacity, behaviors, effects,
+// instance variables), an object, a layer, or the scene itself.
+
 import * as React from "react";
 import {
-  Eye,
-  EyeOff,
-  Plus,
-  Trash2,
-  Lock,
-  Unlock,
-  ChevronDown,
-  ChevronRight,
-  HelpCircle,
   Film,
-  Search,
-  Copy,
-  ClipboardPaste,
-  Undo2,
-  Redo2,
-  ExternalLink,
-  RotateCw,
-  Layers as LayersIcon,
-  ArrowDown,
-  Circle,
-  CircleDot,
+  Lock,
+  Pencil,
+  Plus,
+  RotateCcw,
+  Settings2,
+  SquareStack,
+  Trash2,
+  Unlock,
+  Variable,
 } from "lucide-react";
-import { useEditor } from "@/lib/editor/store";
-import type { GDSceneVariableType } from "@/lib/editor/types";
+import { useEditor, type VariableScopeLocation } from "@/lib/editor/store";
+import { S } from "@/lib/editor/i18n";
+import {
+  BEHAVIORS,
+  behaviorByTypeId,
+  behaviorShortName,
+  objectTypeLabel,
+  resolveAsset,
+} from "@/lib/editor/catalog";
+import { BASE_LAYER_NAME } from "@/lib/editor/scenes";
 import { cn } from "@/lib/utils";
-
-function Field({
-  label,
-  value,
-  onChange,
-  type = "text",
-}: {
-  label: string;
-  value: string | number;
-  onChange: (v: string) => void;
-  type?: string;
-}) {
-  return (
-    <label className="flex items-center gap-2 px-3 py-1 text-[12px]">
-      <span className="w-20 shrink-0 text-muted-foreground">{label}</span>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-8 w-full rounded border border-separator bg-window px-2 text-[12px] text-foreground outline-none focus:border-link"
-      />
-    </label>
-  );
-}
-
-function Section({
-  title,
-  children,
-  right,
-  defaultOpen = true,
-}: {
-  title: string;
-  children: React.ReactNode;
-  right?: React.ReactNode;
-  defaultOpen?: boolean;
-}) {
-  const [open, setOpen] = React.useState(defaultOpen);
-  return (
-    <div className="border-b border-separator py-2">
-      <div className="flex items-center gap-2 px-3">
-        <button
-          type="button"
-          aria-expanded={open}
-          onClick={() => setOpen((o) => !o)}
-          className="flex h-8 w-8 items-center justify-center rounded-md border border-separator text-muted-foreground hover:text-foreground"
-        >
-          {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-        </button>
-        <span className="flex-1 text-[13px] font-semibold text-foreground">{title}</span>
-        {right}
-      </div>
-      {open ? <div className="mt-2">{children}</div> : null}
-    </div>
-  );
-}
-
-/** Scene-level properties + scene variables (shown when no instance is selected). */
-function SceneProperties({ showSceneRow }: { showSceneRow: boolean }) {
-  const { project, dispatch } = useEditor();
-  const [showMore, setShowMore] = React.useState(false);
-  const [query, setQuery] = React.useState("");
-  const variables = (project.sceneVariables ?? []).filter((v) =>
-    v.name.toLowerCase().includes(query.toLowerCase()),
-  );
-
-  return (
-    <div>
-      {showSceneRow ? (
-        <div className="flex items-center gap-2 border-b border-separator px-3 py-3 text-[13px] text-foreground">
-          <Film className="h-4 w-4 text-muted-foreground" />
-          <span className="flex-1 truncate">{project.name || "Escena sin título"}</span>
-          <HelpCircle className="h-4 w-4 text-muted-foreground" />
-        </div>
-      ) : null}
-
-      <Section title="Propiedades">
-        <label className="flex items-center gap-2 px-3 py-1 text-[12px]">
-          <span className="w-28 shrink-0 text-muted-foreground">Color de fondo</span>
-          <input
-            value={project.backgroundColor ?? "247;249;255"}
-            onChange={(e) => dispatch({ type: "setBackgroundColor", value: e.target.value })}
-            className="h-9 w-full rounded border border-separator bg-window px-2 text-[12px] text-foreground outline-none focus:border-link"
-          />
-          <span
-            className="h-7 w-9 shrink-0 rounded border border-separator"
-            style={{ backgroundColor: `rgb(${(project.backgroundColor ?? "247;249;255").replace(/;/g, ",")})` }}
-          />
-        </label>
-        <button
-          type="button"
-          onClick={() => setShowMore((s) => !s)}
-          className="mx-3 mt-2 flex h-10 w-[calc(100%-1.5rem)] items-center justify-center gap-2 rounded-md border border-separator text-[13px] font-semibold text-link"
-        >
-          {showMore ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          {showMore ? "Mostrar menos" : "Mostrar más"}
-        </button>
-        {showMore ? (
-          <div className="mt-1">
-            <Field label="Ancho" type="number" value={project.windowWidth} onChange={() => {}} />
-            <Field label="Alto" type="number" value={project.windowHeight} onChange={() => {}} />
-          </div>
-        ) : null}
-      </Section>
-
-      <Section
-        title="Variables de la escena"
-        right={
-          <div className="flex items-center gap-3 text-muted-foreground">
-            <ExternalLink className="h-4 w-4" />
-            <button
-              type="button"
-              aria-label="Añadir variable"
-              onClick={() => dispatch({ type: "addSceneVariable" })}
-              className="hover:text-foreground"
-            >
-              <Plus className="h-5 w-5" />
-            </button>
-          </div>
-        }
-      >
-        <div className="flex items-center gap-3 px-3 pb-2 text-muted-foreground">
-          <Copy className="h-4 w-4 opacity-50" />
-          <ClipboardPaste className="h-4 w-4 opacity-50" />
-          <Trash2 className="h-4 w-4 opacity-50" />
-          <Undo2 className="h-4 w-4 opacity-50" />
-          <Redo2 className="h-4 w-4 opacity-50" />
-          <div className="flex flex-1 items-center gap-1.5 rounded-md bg-window px-2 py-2">
-            <Search className="h-4 w-4" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar variables"
-              className="w-full bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground"
-            />
-          </div>
-        </div>
-
-        {variables.length === 0 ? (
-          <p className="px-3 py-6 text-center text-[13px] text-muted-foreground">
-            No hay <span className="text-link underline">variables</span> en esta escena.
-          </p>
-        ) : (
-          <ul>
-            {variables.map((v) => (
-              <li key={v.id} className="border-t border-separator px-3 py-2">
-                <input
-                  value={v.name}
-                  onChange={(e) =>
-                    dispatch({ type: "updateSceneVariable", id: v.id, patch: { name: e.target.value } })
-                  }
-                  className="w-full border-b border-separator bg-transparent pb-1 text-[14px] text-foreground outline-none focus:border-link"
-                />
-                <div className="mt-2 flex items-center gap-3">
-                  <span className="text-[10px] text-muted-foreground">123</span>
-                  <select
-                    value={v.type}
-                    onChange={(e) =>
-                      dispatch({
-                        type: "updateSceneVariable",
-                        id: v.id,
-                        patch: { type: e.target.value as GDSceneVariableType },
-                      })
-                    }
-                    className="border-b border-separator bg-transparent pb-1 text-[13px] text-foreground outline-none"
-                  >
-                    <option value="number">Número</option>
-                    <option value="string">Texto</option>
-                    <option value="boolean">Booleano</option>
-                  </select>
-                  <input
-                    value={v.value}
-                    onChange={(e) =>
-                      dispatch({ type: "updateSceneVariable", id: v.id, patch: { value: e.target.value } })
-                    }
-                    className="flex-1 border-b border-separator bg-transparent pb-1 text-[13px] text-foreground outline-none focus:border-link"
-                  />
-                  <button
-                    type="button"
-                    aria-label="Eliminar variable"
-                    onClick={() => dispatch({ type: "deleteSceneVariable", id: v.id })}
-                    className="text-muted-foreground hover:text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Section>
-    </div>
-  );
-}
-
-const TABS: { key: "properties" | "instances" | "layers"; label: string }[] = [
-  { key: "properties", label: "Propiedades" },
-  { key: "instances", label: "Instancias" },
-  { key: "layers", label: "Capas" },
-];
+import {
+  FieldRow,
+  NumberField,
+  Panel,
+  PropertySection,
+  TextField,
+  ToggleField,
+  ChoiceField,
+  ColorField,
+  GdButton,
+} from "./gd/kit";
+import { CatalogIcon, BEHAVIOR_ICON, iconForObjectType } from "./gd/icons";
+import { EffectsList, type EffectsApi } from "./gd/EffectsList";
+import { VariablesEditor, type VariablesApi } from "./gd/VariablesEditor";
 
 export function PropertiesPanel() {
-  const { project, ui, dispatch } = useEditor();
-  const selected = project.instances.find((i) => i.id === ui.selectedInstanceIds[0]);
-  const obj = selected && project.objects.find((o) => o.id === selected.objectId);
-  const [instanceQuery, setInstanceQuery] = React.useState("");
-  const activeLayer = project.activeLayer ?? project.layers[0]?.name;
+  const { scene, ui, dispatch } = useEditor();
+  const selectedInstance =
+    ui.selectedInstanceIds.length === 1
+      ? scene.instances.find((i) => i.id === ui.selectedInstanceIds[0])
+      : undefined;
+  const selectedObject =
+    ui.selectedObjectIds.length === 1
+      ? scene.objects.find((o) => o.id === ui.selectedObjectIds[0])
+      : undefined;
+  const selectedLayer = ui.selectedLayerName
+    ? scene.layers.find((l) => l.name === ui.selectedLayerName)
+    : undefined;
 
-  const instances = project.instances.filter((i) => {
-    const o = project.objects.find((x) => x.id === i.objectId);
-    return (o?.name ?? "").toLowerCase().includes(instanceQuery.toLowerCase());
-  });
+  const objectOfInstance = selectedInstance
+    ? scene.objects.find((o) => o.name === selectedInstance.objectId)
+    : undefined;
+
+  const title = selectedInstance
+    ? S.instanceProperties
+    : selectedObject
+      ? `${S.properties}: ${selectedObject.name}`
+      : selectedLayer
+        ? `${S.layer}: ${selectedLayer.name}`
+        : S.sceneProperties;
 
   return (
-    <aside className="flex w-64 shrink-0 flex-col border-l border-separator bg-toolbar">
-      <div className="hidden h-9 shrink-0 border-b border-separator md:flex">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            onClick={() => dispatch({ type: "ui", patch: { rightTab: t.key } })}
-            className={cn(
-              "flex-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground transition-colors hover:text-foreground",
-              ui.rightTab === t.key && "border-b-2 border-primary text-foreground",
-            )}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+    <Panel title={title} className="min-h-0 flex-1 border-l border-separator" bodyClassName="pb-3">
+      {selectedInstance && objectOfInstance ? (
+        <InstanceProperties
+          instanceId={selectedInstance.id}
+          objectId={objectOfInstance.id}
+          count={ui.selectedInstanceIds.length}
+        />
+      ) : selectedObject ? (
+        <ObjectProperties objectId={selectedObject.id} />
+      ) : selectedLayer ? (
+        <LayerProperties name={selectedLayer.name} />
+      ) : (
+        <SceneQuickProperties />
+      )}
+    </Panel>
+  );
+}
 
-      <div className="flex-1 overflow-y-auto pb-6">
-        {ui.rightTab === "properties" &&
-          (selected && obj ? (
-            <div className="space-y-0.5 py-2">
-              <div className="px-3 pb-2 text-[12px] font-semibold text-foreground">
-                {obj.name}
-                <span className="ml-1 font-normal text-muted-foreground">({obj.type})</span>
-              </div>
-              <Field
-                label="X"
-                type="number"
-                value={selected.x}
-                onChange={(v) =>
-                  dispatch({ type: "updateInstance", id: selected.id, patch: { x: Number(v) || 0 } })
-                }
-              />
-              <Field
-                label="Y"
-                type="number"
-                value={selected.y}
-                onChange={(v) =>
-                  dispatch({ type: "updateInstance", id: selected.id, patch: { y: Number(v) || 0 } })
-                }
-              />
-              <Field
-                label="Ancho"
-                type="number"
-                value={selected.width}
-                onChange={(v) =>
-                  dispatch({
-                    type: "updateInstance",
-                    id: selected.id,
-                    patch: { width: Number(v) || 0, customSize: true },
-                  })
-                }
-              />
-              <Field
-                label="Alto"
-                type="number"
-                value={selected.height}
-                onChange={(v) =>
-                  dispatch({
-                    type: "updateInstance",
-                    id: selected.id,
-                    patch: { height: Number(v) || 0, customSize: true },
-                  })
-                }
-              />
-              <Field
-                label="Ángulo"
-                type="number"
-                value={selected.angle}
-                onChange={(v) =>
-                  dispatch({
-                    type: "updateInstance",
-                    id: selected.id,
-                    patch: { angle: Number(v) || 0 },
-                  })
-                }
-              />
-              <Field
-                label="Orden Z"
-                type="number"
-                value={selected.zOrder}
-                onChange={(v) =>
-                  dispatch({
-                    type: "updateInstance",
-                    id: selected.id,
-                    patch: { zOrder: Number(v) || 0 },
-                  })
-                }
-              />
-              <label className="flex items-center gap-2 px-3 py-1 text-[12px]">
-                <span className="w-20 shrink-0 text-muted-foreground">Capa</span>
-                <select
-                  value={selected.layer}
-                  onChange={(e) =>
-                    dispatch({
-                      type: "updateInstance",
-                      id: selected.id,
-                      patch: { layer: e.target.value },
-                    })
-                  }
-                  className="h-8 w-full rounded border border-separator bg-window px-1 text-[12px] text-foreground outline-none focus:border-link"
-                >
-                  {project.layers.map((l) => (
-                    <option key={l.name} value={l.name}>
-                      {l.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                type="button"
-                onClick={() =>
-                  dispatch({
-                    type: "updateInstance",
-                    id: selected.id,
-                    patch: { locked: !selected.locked },
-                  })
-                }
-                className="mx-3 mt-2 flex items-center gap-1.5 rounded px-2 py-2 text-[12px] text-muted-foreground hover:bg-elevated hover:text-foreground"
-              >
-                {selected.locked ? <Lock className="h-4 w-4" /> : <Unlock className="h-4 w-4" />}
-                {selected.locked ? "Desbloquear instancia" : "Bloquear instancia"}
-              </button>
+/* ------------------------------------------------------------------ instance */
 
-              <div className="mt-3 border-t border-separator px-3 pt-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Variables de la instancia
-              </div>
-              {obj.variables.length === 0 ? (
-                <p className="px-3 py-1 text-[12px] text-muted-foreground">No hay variables.</p>
-              ) : (
-                obj.variables.map((v) => (
-                  <div key={v.name} className="flex items-center gap-2 px-3 py-0.5 text-[12px]">
-                    <span className="w-20 truncate text-link">{v.name}</span>
-                    <span className="text-foreground">{v.value}</span>
-                  </div>
-                ))
-              )}
+function InstanceProperties({
+  instanceId,
+  objectId,
+  count,
+}: {
+  instanceId: string;
+  objectId: string;
+  count: number;
+}) {
+  const { scene, dispatch } = useEditor();
+  const instance = scene.instances.find((i) => i.id === instanceId);
+  const object = scene.objects.find((o) => o.id === objectId);
+  if (!instance || !object) return null;
 
-              <button
-                type="button"
-                onClick={() => dispatch({ type: "deleteInstance", id: selected.id })}
-                className="mx-3 mt-3 flex items-center gap-1.5 rounded px-2 py-2 text-[12px] text-destructive hover:bg-elevated"
-              >
-                <Trash2 className="h-4 w-4" /> Eliminar instancia
-              </button>
-            </div>
-          ) : (
-            <SceneProperties showSceneRow />
+  const patch = (next: Partial<typeof instance>) =>
+    dispatch({ type: "updateInstance", id: instanceId, patch: next });
+
+  const instanceLocation: VariableScopeLocation = { scope: "instance", objectId: instanceId };
+  const variablesApi: VariablesApi = {
+    variables: instance.variables,
+    add: (path) =>
+      path.length === 0
+        ? dispatch({ type: "addVariable", location: instanceLocation })
+        : dispatch({ type: "addVariableChild", location: instanceLocation, path }),
+    update: (path, patch) =>
+      dispatch({ type: "updateVariable", location: instanceLocation, path, patch }),
+    remove: (path) => dispatch({ type: "deleteVariable", location: instanceLocation, path }),
+  };
+
+  const effectsApi: EffectsApi = {
+    effects: instance.effects,
+    add: (effect) =>
+      dispatch({
+        type: "addEffect",
+        target: { kind: "instance", id: instanceId },
+        effect,
+      }),
+    update: (index, next) =>
+      dispatch({
+        type: "updateEffect",
+        target: { kind: "instance", id: instanceId },
+        index,
+        patch: next,
+      }),
+    remove: (index) =>
+      dispatch({ type: "deleteEffect", target: { kind: "instance", id: instanceId }, index }),
+    move: (index, direction) =>
+      dispatch({
+        type: "moveEffect",
+        target: { kind: "instance", id: instanceId },
+        index,
+        direction,
+      }),
+  };
+
+  return (
+    <>
+      <PropertySection title={S.position}>
+        <FieldRow label="X">
+          <NumberField value={instance.x} onChange={(x) => patch({ x: Math.round(x) })} />
+        </FieldRow>
+        <FieldRow label="Y">
+          <NumberField value={instance.y} onChange={(y) => patch({ y: Math.round(y) })} />
+        </FieldRow>
+      </PropertySection>
+
+      <PropertySection title={S.size}>
+        <FieldRow label={S.customSize}>
+          <ToggleField
+            checked={instance.customSize}
+            label={S.customSize}
+            onChange={(customSize) => patch({ customSize })}
+          />
+        </FieldRow>
+        {instance.customSize ? (
+          <>
+            <FieldRow label="Ancho">
+              <NumberField
+                value={instance.width}
+                onChange={(width) => patch({ width: Math.max(1, Math.round(width)) })}
+              />
+            </FieldRow>
+            <FieldRow label="Alto">
+              <NumberField
+                value={instance.height}
+                onChange={(height) => patch({ height: Math.max(1, Math.round(height)) })}
+              />
+            </FieldRow>
+          </>
+        ) : (
+          <p className="px-3 py-1 text-[12px] text-text-placeholder">
+            Tamaño original del recurso (deshaz «{S.customSize}» para cambiarlo).
+          </p>
+        )}
+      </PropertySection>
+
+      <PropertySection title={S.angle}>
+        <FieldRow label={S.angle}>
+          <NumberField value={instance.angle} onChange={(angle) => patch({ angle })} />
+        </FieldRow>
+        <div className="flex items-center gap-1 px-3 pb-1">
+          {[0, 90, 180, 270].map((angle) => (
+            <button
+              key={angle}
+              type="button"
+              onClick={() => patch({ angle })}
+              className="h-6 rounded border border-separator px-1.5 text-[11px] text-text-secondary hover:bg-list-hover hover:text-foreground"
+            >
+              {angle}°
+            </button>
           ))}
+          <button
+            type="button"
+            aria-label="Restablecer ángulo"
+            onClick={() => patch({ angle: 0 })}
+            className="grid h-6 w-6 place-items-center rounded border border-separator text-text-secondary hover:bg-list-hover hover:text-foreground"
+          >
+            <RotateCcw className="h-3 w-3" />
+          </button>
+        </div>
+      </PropertySection>
 
-        {ui.rightTab === "instances" && (
-          <div>
-            <div className="p-3">
-              <div className="flex items-center gap-2 rounded-md bg-window px-2 py-2">
-                <Search className="h-4 w-4 text-muted-foreground" />
-                <input
-                  value={instanceQuery}
-                  onChange={(e) => setInstanceQuery(e.target.value)}
-                  placeholder="Buscar instancias"
-                  className="w-full bg-transparent text-[13px] text-foreground outline-none placeholder:text-muted-foreground"
-                />
-              </div>
-            </div>
-            <div className="flex items-center gap-2 border-b border-separator px-3 pb-2 text-[12px] text-muted-foreground">
-              <span className="flex-1">Nombre del objeto</span>
-              <span className="w-8 text-center">X</span>
-              <span className="w-8 text-center">Y</span>
-              <span className="w-8 text-center">Z</span>
-              <RotateCw className="h-4 w-4" />
-              <LayersIcon className="h-4 w-4" />
-              <ArrowDown className="h-4 w-4" />
-            </div>
-            <ul className="text-[12px]">
-              {instances.map((i) => {
-                const o = project.objects.find((x) => x.id === i.objectId);
-                const sel = ui.selectedInstanceIds.includes(i.id);
-                return (
-                  <li key={i.id}>
-                    <button
-                      type="button"
-                      onClick={() => dispatch({ type: "selectInstance", id: i.id })}
-                      className={cn(
-                        "flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-elevated",
-                        sel && "bg-selection text-foreground",
-                      )}
-                    >
-                      <span className="flex-1 truncate">{o?.name ?? "?"}</span>
-                      <span className="w-8 text-center tabular-nums text-muted-foreground">
-                        {Math.round(i.x)}
-                      </span>
-                      <span className="w-8 text-center tabular-nums text-muted-foreground">
-                        {Math.round(i.y)}
-                      </span>
-                      <span className="w-8 text-center tabular-nums text-muted-foreground">
-                        {i.zOrder}
-                      </span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+      <PropertySection title={`${S.zOrder} / ${S.layer}`}>
+        <FieldRow label={S.zOrder}>
+          <NumberField
+            value={instance.zOrder}
+            onChange={(zOrder) => patch({ zOrder: Math.round(zOrder) })}
+          />
+        </FieldRow>
+        <FieldRow label={S.layer}>
+          <ChoiceField
+            value={instance.layer}
+            options={scene.layers.map((l) => l.name)}
+            onChange={(layer) => patch({ layer })}
+          />
+        </FieldRow>
+      </PropertySection>
+
+      <PropertySection title={`${S.opacity} / ${S.hidden}`}>
+        <FieldRow label={S.opacity}>
+          <input
+            type="range"
+            min={0}
+            max={255}
+            value={255}
+            disabled
+            className="h-1 min-w-0 flex-1 accent-[var(--brand)]"
+            aria-label={S.opacity}
+          />
+          <span className="w-8 shrink-0 text-right text-[12px] tabular-nums text-text-secondary">
+            255
+          </span>
+        </FieldRow>
+        <FieldRow label={S.hiddenWhenSceneStarts}>
+          <ToggleField
+            checked={instance.hiddenAtStart}
+            label={S.hiddenWhenSceneStarts}
+            onChange={(hiddenAtStart) => patch({ hiddenAtStart })}
+          />
+        </FieldRow>
+        <FieldRow label={S.locked}>
+          <ToggleField
+            checked={instance.locked}
+            label={S.locked}
+            onChange={(locked) => patch({ locked })}
+          />
+        </FieldRow>
+      </PropertySection>
+
+      {count > 1 ? (
+        <p className="px-3 py-2 text-[12px] text-text-secondary">
+          {count} instancias seleccionadas — las propiedades de arriba pertenecen a la instancia
+          activa.
+        </p>
+      ) : null}
+
+      <BehaviorSection objectId={objectId} />
+
+      <PropertySection title={`${S.effects} (${instance.effects.length})`}>
+        <EffectsList api={effectsApi} compact />
+      </PropertySection>
+
+      <PropertySection title={S.instanceVariables}>
+        <VariablesEditor api={variablesApi} emptyLabel={S.addYourFirstInstanceVariable} />
+      </PropertySection>
+    </>
+  );
+}
+
+/* -------------------------------------------------------------------- object */
+
+function ObjectProperties({ objectId }: { objectId: string }) {
+  const { scene, dispatch } = useEditor();
+  const object = scene.objects.find((o) => o.id === objectId);
+  if (!object) return null;
+  const objectLocation: VariableScopeLocation = { scope: "object", objectId };
+  const variablesApi: VariablesApi = {
+    variables: object.variables,
+    add: (path) =>
+      path.length === 0
+        ? dispatch({ type: "addVariable", location: objectLocation })
+        : dispatch({ type: "addVariableChild", location: objectLocation, path }),
+    update: (path, patch) =>
+      dispatch({ type: "updateVariable", location: objectLocation, path, patch }),
+    remove: (path) => dispatch({ type: "deleteVariable", location: objectLocation, path }),
+  };
+  const effectsApi: EffectsApi = {
+    effects: object.effects,
+    add: (effect) =>
+      dispatch({ type: "addEffect", target: { kind: "object", id: objectId }, effect }),
+    update: (index, patch) =>
+      dispatch({ type: "updateEffect", target: { kind: "object", id: objectId }, index, patch }),
+    remove: (index) =>
+      dispatch({ type: "deleteEffect", target: { kind: "object", id: objectId }, index }),
+    move: (index, direction) =>
+      dispatch({ type: "moveEffect", target: { kind: "object", id: objectId }, index, direction }),
+  };
+  const instances = scene.instances.filter((i) => i.objectId === object.id);
+
+  return (
+    <>
+      <div className="flex items-center gap-2 px-3 py-2">
+        {(() => {
+          const image = resolveAsset(object.animations?.[0]?.images?.[0]?.image ?? object.asset);
+          return image ? (
+            <img
+              src={image}
+              alt=""
+              className="h-8 w-8 shrink-0 rounded bg-[#1D1D26] object-contain p-0.5 [image-rendering:pixelated]"
+            />
+          ) : (
+            <CatalogIcon
+              name={iconForObjectType(object.type)}
+              className="h-7 w-7 shrink-0 text-[#C9B6FC]"
+            />
+          );
+        })()}
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[13px] font-semibold">{object.name}</div>
+          <div className="truncate text-[11px] text-text-secondary">
+            {objectTypeLabel(object.type)} · {instances.length} instancia(s)
           </div>
-        )}
+        </div>
+      </div>
 
-        {ui.rightTab === "layers" && (
-          <div className="text-[14px]">
-            <div className="flex justify-end px-3 py-2">
+      <div className="grid grid-cols-2 gap-1 px-2 pb-1">
+        <GdButton
+          variant="raised"
+          primary
+          size="small"
+          icon={<Pencil className="h-3.5 w-3.5" />}
+          onClick={() =>
+            dispatch({ type: "openDialog", dialog: { name: "objectEditor", objectId } })
+          }
+        >
+          {S.editObject}
+        </GdButton>
+        <GdButton
+          variant="raised"
+          size="small"
+          icon={<Settings2 className="h-3.5 w-3.5" />}
+          onClick={() => dispatch({ type: "openDialog", dialog: { name: "behaviors", objectId } })}
+        >
+          {S.behaviors}
+        </GdButton>
+      </div>
+
+      <PropertySection title={`${S.behaviors} (${object.behaviors.length})`}>
+        {object.behaviors.length === 0 ? (
+          <p className="px-3 py-1 text-[12.5px] text-text-secondary">{S.addYourFirstBehavior}</p>
+        ) : null}
+        {object.behaviors.map((behavior) => {
+          const definition = behaviorByTypeId(behavior.type);
+          return (
+            <div key={behavior.name} className="flex items-center gap-2 px-3 py-1 text-[12.5px]">
+              <CatalogIcon
+                name={BEHAVIOR_ICON[behavior.type] ?? "puzzle"}
+                className="h-4 w-4 shrink-0 text-[#8AD6FF]"
+              />
+              <span className="min-w-0 flex-1 truncate">{behavior.name}</span>
+              <span className="shrink-0 text-[10px] text-text-secondary">
+                {definition?.name ?? behaviorShortName(behavior.type)}
+              </span>
+            </div>
+          );
+        })}
+        <div className="px-3 pb-1">
+          <GdButton
+            variant="raised"
+            size="small"
+            icon={<Plus className="h-3.5 w-3.5" />}
+            onClick={() =>
+              dispatch({ type: "openDialog", dialog: { name: "behaviors", objectId } })
+            }
+          >
+            {S.addABehavior}
+          </GdButton>
+        </div>
+      </PropertySection>
+
+      <PropertySection title={`${S.effects} (${object.effects.length})`}>
+        <EffectsList api={effectsApi} compact />
+      </PropertySection>
+
+      <PropertySection title={`${S.variables} (${object.variables.length})`}>
+        <VariablesEditor api={variablesApi} />
+      </PropertySection>
+    </>
+  );
+}
+
+function BehaviorSection({ objectId }: { objectId: string }) {
+  const { scene, dispatch } = useEditor();
+  const object = scene.objects.find((o) => o.id === objectId);
+  if (!object) return null;
+  return (
+    <PropertySection title={`${S.behaviors} (${object.behaviors.length})`}>
+      {object.behaviors.length === 0 ? (
+        <p className="px-3 py-1 text-[12.5px] text-text-secondary">{S.addYourFirstBehavior}</p>
+      ) : null}
+      {object.behaviors.map((behavior) => {
+        const definition = BEHAVIORS.find((b) => b.typeId === behavior.type);
+        return (
+          <div key={behavior.name} className="px-3 py-1">
+            <div className="flex items-center gap-2 text-[12.5px]">
+              <CatalogIcon
+                name={BEHAVIOR_ICON[behavior.type] ?? "puzzle"}
+                className="h-4 w-4 shrink-0 text-[#8AD6FF]"
+              />
+              <span className="min-w-0 flex-1 truncate">{behavior.name}</span>
               <button
                 type="button"
-                aria-label="Añadir capa"
-                onClick={() => dispatch({ type: "addLayer" })}
-                className="text-muted-foreground hover:text-foreground"
+                aria-label={S.editBehaviors}
+                onClick={() =>
+                  dispatch({ type: "openDialog", dialog: { name: "behaviors", objectId } })
+                }
+                className="shrink-0 text-text-secondary hover:text-foreground"
               >
-                <Plus className="h-6 w-6" />
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                aria-label={S.delete}
+                onClick={() =>
+                  dispatch({ type: "deleteBehavior", objectId, behaviorName: behavior.name })
+                }
+                className="shrink-0 text-text-secondary hover:text-destructive"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
               </button>
             </div>
-            {[...project.layers].reverse().map((l) => (
-              <div key={l.name} className="flex items-center gap-5 px-4 py-3 hover:bg-elevated">
-                <span className={cn("flex-1 truncate", !l.visible && "text-muted-foreground")}>
-                  {l.name}
-                </span>
-                <button
-                  type="button"
-                  aria-label={`Activar capa ${l.name}`}
-                  onClick={() => dispatch({ type: "setActiveLayer", name: l.name })}
-                  className={cn(
-                    "text-muted-foreground hover:text-foreground",
-                    activeLayer === l.name && "text-link",
-                  )}
-                >
-                  {activeLayer === l.name ? (
-                    <CircleDot className="h-5 w-5" />
-                  ) : (
-                    <Circle className="h-5 w-5" />
-                  )}
-                </button>
-                <button
-                  type="button"
-                  aria-label={`Visibilidad de ${l.name}`}
-                  onClick={() => dispatch({ type: "toggleLayer", name: l.name })}
-                  className="text-link hover:text-link-hover"
-                >
-                  {l.visible ? <Eye className="h-5 w-5" /> : <EyeOff className="h-5 w-5" />}
-                </button>
-                <button
-                  type="button"
-                  aria-label={`Bloquear ${l.name}`}
-                  onClick={() => dispatch({ type: "toggleLayerLock", name: l.name })}
-                  className="text-link hover:text-link-hover"
-                >
-                  {l.locked ? <Lock className="h-5 w-5" /> : <Unlock className="h-5 w-5" />}
-                </button>
-              </div>
-            ))}
-            <div className="flex items-center gap-3 px-4 py-3">
-              <span className="flex-1">Color de fondo</span>
-              <label
-                className="h-8 w-16 shrink-0 cursor-pointer rounded border border-separator"
-                style={{
-                  backgroundColor: `rgb(${(project.backgroundColor ?? "247;249;255").replace(/;/g, ",")})`,
-                }}
-              >
-                <input
-                  type="color"
-                  className="sr-only"
-                  onChange={(e) => {
-                    const hex = e.target.value;
-                    const rgb = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(";");
-                    dispatch({ type: "setBackgroundColor", value: rgb });
-                  }}
-                />
-              </label>
-            </div>
+            {definition
+              ? definition.properties
+                  .filter((property) => property.type !== "yesno")
+                  .slice(0, 6)
+                  .map((property) => (
+                    <FieldRow key={property.key} label={property.label}>
+                      <ExpressionLikeField
+                        value={behavior.properties[property.key] ?? property.value}
+                        numeric={property.type === "number"}
+                        onChange={(value) =>
+                          dispatch({
+                            type: "updateBehavior",
+                            objectId,
+                            behaviorName: behavior.name,
+                            patch: {
+                              properties: { ...behavior.properties, [property.key]: value },
+                            },
+                          })
+                        }
+                      />
+                    </FieldRow>
+                  ))
+              : null}
           </div>
-        )}
+        );
+      })}
+    </PropertySection>
+  );
+}
+
+function ExpressionLikeField({
+  value,
+  numeric,
+  onChange,
+}: {
+  value: string;
+  numeric: boolean;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <input
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      className={cn(
+        "h-7 min-w-0 flex-1 rounded border border-separator bg-[#1D1D26] px-1.5 text-[12.5px] text-foreground outline-none focus:border-[var(--brand-light)]",
+        numeric && "tabular-nums",
+      )}
+    />
+  );
+}
+
+/* --------------------------------------------------------------------- layer */
+
+function LayerProperties({ name }: { name: string }) {
+  const { scene, dispatch } = useEditor();
+  const layer = scene.layers.find((l) => l.name === name);
+  if (!layer) return null;
+  const isBase = layer.name === BASE_LAYER_NAME;
+  const effectsApi: EffectsApi = {
+    effects: layer.effects,
+    add: (effect) => dispatch({ type: "addEffect", target: { kind: "layer", name }, effect }),
+    update: (index, patch) =>
+      dispatch({ type: "updateEffect", target: { kind: "layer", name }, index, patch }),
+    remove: (index) => dispatch({ type: "deleteEffect", target: { kind: "layer", name }, index }),
+    move: (index, direction) =>
+      dispatch({ type: "moveEffect", target: { kind: "layer", name }, index, direction }),
+  };
+  const instances = scene.instances.filter((i) => i.layer === layer.name);
+
+  return (
+    <>
+      <div className="flex items-center gap-2 px-3 py-2">
+        <SquareStack className="h-5 w-5 shrink-0 text-[#C9B6FC]" />
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[13px] font-semibold">{layer.name}</div>
+          <div className="text-[11px] text-text-secondary">
+            {instances.length} instancia(s)
+            {isBase ? " · capa base" : ""}
+          </div>
+        </div>
       </div>
-    </aside>
+
+      <PropertySection title={`${S.position} (cámara)`}>
+        <FieldRow label="X">
+          <NumberField
+            value={layer.camera.x}
+            onChange={(x) =>
+              dispatch({ type: "updateLayer", name, patch: { camera: { ...layer.camera, x } } })
+            }
+          />
+        </FieldRow>
+        <FieldRow label="Y">
+          <NumberField
+            value={layer.camera.y}
+            onChange={(y) =>
+              dispatch({ type: "updateLayer", name, patch: { camera: { ...layer.camera, y } } })
+            }
+          />
+        </FieldRow>
+      </PropertySection>
+
+      <PropertySection title={S.properties}>
+        <FieldRow label={S.visible}>
+          <ToggleField
+            checked={layer.visible}
+            label={S.visible}
+            onChange={(visible) => dispatch({ type: "updateLayer", name, patch: { visible } })}
+          />
+        </FieldRow>
+        <FieldRow label={S.locked}>
+          <ToggleField
+            checked={!!layer.locked}
+            label={S.locked}
+            onChange={(locked) => dispatch({ type: "updateLayer", name, patch: { locked } })}
+          />
+        </FieldRow>
+        {!isBase ? (
+          <FieldRow label="Usar la cámara de la capa base">
+            <ToggleField
+              checked={layer.followBaseLayer !== false}
+              label="followBaseLayer"
+              onChange={(followBaseLayer) =>
+                dispatch({ type: "updateLayer", name, patch: { followBaseLayer } })
+              }
+            />
+          </FieldRow>
+        ) : null}
+        {layer.isLightingLayer ? (
+          <FieldRow label="Luz ambiental">
+            <ColorField
+              value={layer.ambientLightColor ?? "180;180;180"}
+              onChange={(ambientLightColor) =>
+                dispatch({ type: "updateLayer", name, patch: { ambientLightColor } })
+              }
+            />
+          </FieldRow>
+        ) : null}
+      </PropertySection>
+
+      <PropertySection title={`${S.effects} (${layer.effects.length})`}>
+        <EffectsList api={effectsApi} compact />
+      </PropertySection>
+    </>
+  );
+}
+
+/* --------------------------------------------------------------------- scene */
+
+function SceneQuickProperties() {
+  const { scene, dispatch, project } = useEditor();
+  const sceneLocation: VariableScopeLocation = { scope: "scene" };
+  const variablesApi: VariablesApi = {
+    variables: scene.variables,
+    add: (path) =>
+      path.length === 0
+        ? dispatch({ type: "addVariable", location: sceneLocation })
+        : dispatch({ type: "addVariableChild", location: sceneLocation, path }),
+    update: (path, patch) =>
+      dispatch({ type: "updateVariable", location: { scope: "scene" }, path, patch }),
+    remove: (path) => dispatch({ type: "deleteVariable", location: { scope: "scene" }, path }),
+  };
+  const layerNames = scene.layers.map((l) => l.name);
+
+  return (
+    <>
+      <PropertySection title={S.sceneProperties}>
+        <FieldRow label="Nombre">
+          <TextField
+            value={scene.name}
+            onChange={(name) =>
+              name && dispatch({ type: "renameScene", from: scene.name, to: name })
+            }
+          />
+        </FieldRow>
+        <FieldRow label={S.background}>
+          <ColorField
+            value={scene.backgroundColor}
+            onChange={(backgroundColor) =>
+              dispatch({ type: "updateScene", patch: { backgroundColor } })
+            }
+          />
+        </FieldRow>
+        <FieldRow label={S.layerWhereInstancesAreAdded}>
+          <ChoiceField
+            value={scene.activeLayer}
+            options={layerNames.length ? layerNames : [BASE_LAYER_NAME]}
+            onChange={(activeLayer) => dispatch({ type: "updateScene", patch: { activeLayer } })}
+          />
+        </FieldRow>
+        <FieldRow label={S.customWindowSize}>
+          <ToggleField
+            checked={!!scene.useCustomWindowSize}
+            label={S.customWindowSize}
+            onChange={(useCustomWindowSize) =>
+              dispatch({ type: "updateScene", patch: { useCustomWindowSize } })
+            }
+          />
+        </FieldRow>
+        {scene.useCustomWindowSize ? (
+          <>
+            <FieldRow label="Ancho">
+              <NumberField
+                value={scene.customWindowWidth ?? project.gameSettings.windowWidth}
+                onChange={(customWindowWidth) =>
+                  dispatch({
+                    type: "updateScene",
+                    patch: { customWindowWidth: Math.max(1, Math.round(customWindowWidth)) },
+                  })
+                }
+              />
+            </FieldRow>
+            <FieldRow label="Alto">
+              <NumberField
+                value={scene.customWindowHeight ?? project.gameSettings.windowHeight}
+                onChange={(customWindowHeight) =>
+                  dispatch({
+                    type: "updateScene",
+                    patch: { customWindowHeight: Math.max(1, Math.round(customWindowHeight)) },
+                  })
+                }
+              />
+            </FieldRow>
+          </>
+        ) : (
+          <p className="px-3 py-1 text-[12px] text-text-placeholder">
+            {project.gameSettings.windowWidth} × {project.gameSettings.windowHeight} (configuración
+            del juego)
+          </p>
+        )}
+        <div className="px-3 pt-1">
+          <GdButton
+            variant="raised"
+            size="small"
+            icon={<Film className="h-3.5 w-3.5" />}
+            onClick={() => dispatch({ type: "openDialog", dialog: { name: "sceneProperties" } })}
+          >
+            {S.sceneProperties}
+          </GdButton>
+        </div>
+      </PropertySection>
+
+      <PropertySection title="Cuadrícula">
+        <FieldRow label={S.visible}>
+          <ToggleField
+            checked={scene.grid.show}
+            label={S.toggleGrid}
+            onChange={(show) => dispatch({ type: "updateGrid", patch: { show } })}
+          />
+        </FieldRow>
+        <FieldRow label={S.snapToGrid}>
+          <ToggleField
+            checked={scene.grid.snap}
+            label={S.snapToGrid}
+            onChange={(snap) => dispatch({ type: "updateGrid", patch: { snap } })}
+          />
+        </FieldRow>
+        <FieldRow label={S.gridHorizontal}>
+          <NumberField
+            value={scene.grid.width}
+            onChange={(width) =>
+              dispatch({ type: "updateGrid", patch: { width: Math.max(1, width) } })
+            }
+          />
+        </FieldRow>
+        <FieldRow label={S.gridVertical}>
+          <NumberField
+            value={scene.grid.height}
+            onChange={(height) =>
+              dispatch({ type: "updateGrid", patch: { height: Math.max(1, height) } })
+            }
+          />
+        </FieldRow>
+        <FieldRow label={S.gridColor}>
+          <ColorField
+            value={scene.grid.color}
+            onChange={(color) => dispatch({ type: "updateGrid", patch: { color } })}
+          />
+        </FieldRow>
+        <FieldRow label={S.gridAlpha}>
+          <NumberField
+            value={scene.grid.alpha}
+            onChange={(alpha) =>
+              dispatch({ type: "updateGrid", patch: { alpha: Math.max(0, Math.min(1, alpha)) } })
+            }
+          />
+        </FieldRow>
+      </PropertySection>
+
+      <PropertySection title={`${S.sceneVariables} (${scene.variables.length})`}>
+        <VariablesEditor api={variablesApi} />
+      </PropertySection>
+
+      <div className="flex items-center gap-2 px-3 py-2 text-[11.5px] text-text-secondary">
+        <Film className="h-3.5 w-3.5" />
+        {scene.instances.length} instancias · {scene.objects.length} objetos · {scene.events.length}{" "}
+        eventos
+        <span className="ml-auto flex items-center gap-1">
+          <Variable className="h-3.5 w-3.5" />
+          {project.globalVariables.length}
+          <Lock className="h-3.5 w-3.5" />
+          {scene.instances.filter((i) => i.locked).length}
+        </span>
+      </div>
+    </>
   );
 }
