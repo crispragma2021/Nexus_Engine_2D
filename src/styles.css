@@ -63,6 +63,20 @@
   --color-warning-gd: var(--warning-gd);
   --color-comment-green: var(--comment-green);
   --color-event-alt: var(--event-alt);
+  /* Events sheet (GDevelop eventsSheet tokens) */
+  --color-ev-conditions: var(--ev-conditions);
+  --color-ev-actions: var(--ev-actions);
+  --color-ev-border: var(--ev-border);
+  --color-ev-row: var(--ev-row);
+  --color-ev-row-text: var(--ev-row-text);
+  --color-ev-selected: var(--ev-selected);
+  --color-param-base: var(--param-base);
+  --color-param-number: var(--param-number);
+  --color-param-object: var(--param-object);
+  --color-param-behavior: var(--param-behavior);
+  --color-param-operator: var(--param-operator);
+  --color-param-var: var(--param-var);
+  --color-param-error: var(--param-error);
 }
 
 @theme {
