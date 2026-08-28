@@ -62,8 +62,57 @@
   --color-info: var(--info);
   --color-warning-gd: var(--warning-gd);
   --color-comment-green: var(--comment-green);
+  --color-comment-green-bg: var(--comment-green-bg);
+  --color-comment-green-text: var(--comment-green-text);
+  --color-comment-yellow-bg: var(--comment-yellow-bg);
+  --color-comment-yellow-text: var(--comment-yellow-text);
+  --color-comment-orange-bg: var(--comment-orange-bg);
+  --color-comment-orange-text: var(--comment-orange-text);
+  --color-brand: var(--brand);
+  --color-brand-dark: var(--brand-dark);
+  --color-brand-darkest: var(--brand-darkest);
+  --color-brand-light: var(--brand-light);
+  --color-param-error-bg: var(--param-error-bg);
+  --color-param-warning: var(--param-warning);
   --color-event-alt: var(--event-alt);
+  /* GDevelop surfaces & states (theme.json: surface.*, tabs.*, list-item.*, text-field.*) */
+  --color-list-hover: var(--list-hover);
+  --color-search-bar: var(--search-bar);
+  --color-hover-bg: var(--hover-bg);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-disabled: var(--text-disabled);
+  --color-text-placeholder: var(--text-placeholder);
+  --color-tabs-bar: var(--tabs-bar);
+  --color-tabs-text: var(--tabs-text);
+  --color-tabs-selected-bg: var(--tabs-selected-bg);
+  --color-tabs-selected-text: var(--tabs-selected-text);
+  --color-closable-tab: var(--closable-tab);
+  --color-closable-tab-selected: var(--closable-tab-selected);
+  --color-closable-tab-border: var(--closable-tab-border);
+  --color-toolbar-separator: var(--toolbar-separator);
+  --color-grid-line: var(--grid-line);
+  --color-select-indigo: var(--select-indigo);
+  --color-table-header: var(--table-header);
+  --color-table-odd: var(--table-odd);
+  --color-table-even: var(--table-even);
+  --color-table-border: var(--table-border);
+  --color-table-text: var(--table-text);
+  --color-table-text-header: var(--table-text-header);
+  --color-tooltip: var(--tooltip);
+  --color-snackbar: var(--snackbar);
   /* Events sheet (GDevelop eventsSheet tokens) */
+  --color-ev-tree: var(--ev-tree);
+  --color-ev-ca-border: var(--ev-ca-border);
+  --color-ev-move-handle: var(--ev-move-handle);
+  --color-ev-move-handle-hover: var(--ev-move-handle-hover);
+  --color-ev-line: var(--ev-line);
+  --color-ev-selectable: var(--ev-selectable);
+  --color-ev-sub-border: var(--ev-sub-border);
+  --color-ev-warning: var(--ev-warning);
+  --color-ev-highlight: var(--ev-highlight);
+  --color-ev-highlight-text: var(--ev-highlight-text);
+  --color-ev-link-container: var(--ev-link-container);
+  --color-ev-selectable-link: var(--ev-selectable-link);
   --color-ev-conditions: var(--ev-conditions);
   --color-ev-actions: var(--ev-actions);
   --color-ev-border: var(--ev-border);
@@ -97,7 +146,7 @@
   --popover: var(--toolbar);
   --popover-foreground: oklch(0.9851 0 89.88);
   /* Brand purple */
-  --primary: oklch(0.5429 0.2335 287.51); /* #7046EC */
+  --primary: var(--brand); /* #7046EC — marca Nexus Engine */
   --primary-foreground: oklch(0.9851 0 89.88);
   --secondary: var(--elevated);
   --secondary-foreground: oklch(0.9851 0 89.88);
@@ -109,10 +158,10 @@
   --destructive-foreground: oklch(0.9851 0 89.88);
   --border: oklch(0.3208 0.0159 285.47);
   --input: oklch(0.4087 0.0149 285.72);
-  --ring: oklch(0.5429 0.2335 287.51);
+  --ring: var(--brand);
   /* Editor-specific */
-  --link: oklch(0.8851 0.0638 297.03); /* #DDD1FF */
-  --link-hover: oklch(0.8167 0.0989 296.61); /* #C9B6FC */
+  --link: #ddd1ff; /* secondary.dark */
+  --link-hover: var(--brand-light); /* #C9B6FC */
   --selection: oklch(0.3867 0.0251 266.92); /* #3E4452 */
   --success: oklch(0.7934 0.1487 163.62); /* #45D9A1 */
   --info: oklch(0.7426 0.1357 253.52); /* #6BAFFF */
@@ -133,6 +182,57 @@
   --param-operator: #FF85ED;
   --param-var: #8AD6FF;
   --param-error: #FE6C46;
+  /* === GDevelop 5 · DefaultDarkTheme (valores literales de theme.json) === */
+  /* Marca: Nexus Engine reutiliza la rampa morada oficial (única fuente de verdad) */
+  --brand: #7046ec;
+  --brand-dark: #4f28cd;
+  --brand-darkest: #37238f;
+  --brand-light: #c9b6fc;
+  --list-hover: #2f2f36;
+  --search-bar: #494952;
+  --hover-bg: rgba(255, 255, 255, 0.08);
+  --text-secondary: #c5c5c9;
+  --text-disabled: #9aa1ad;
+  --text-placeholder: #a6a6ab;
+  --tabs-bar: #32323b;
+  --tabs-text: #7f7f85;
+  --tabs-selected-bg: #494952;
+  --tabs-selected-text: #f6f2ff;
+  --closable-tab: #32323b;
+  --closable-tab-selected: #25252e;
+  --closable-tab-border: #7f7f85;
+  --toolbar-separator: #3e4452;
+  --grid-line: rgba(158, 180, 255, 0.8);
+  --select-indigo: #6868e8;
+  --table-header: #25252e;
+  --table-odd: #23232a;
+  --table-even: #1d1d26;
+  --table-border: #282c34;
+  --table-text: #abb2bf;
+  --table-text-header: #d6deec;
+  --tooltip: #494952;
+  --snackbar: #32323b;
+  /* event-sheet.* */
+  --ev-tree: #282c34;
+  --ev-ca-border: #32323b;
+  --ev-move-handle: #3e4452;
+  --ev-move-handle-hover: #6c7d96;
+  --ev-line: #494952;
+  --ev-selectable: rgba(0, 0, 0, 0.1);
+  --ev-sub-border: #3e4452;
+  --ev-warning: rgba(255, 188, 87, 0.13);
+  --ev-highlight: #3d4d51;
+  --ev-highlight-text: #e5c07b;
+  --ev-link-container: #3e4452;
+  --ev-selectable-link: #c678dd;
+  --param-error-bg: #fe6c4666;
+  --param-warning: #fb9600;
+  --comment-green-bg: #2d3e2c;
+  --comment-green-text: #98c379;
+  --comment-yellow-bg: #3e3a24;
+  --comment-yellow-text: #e5c07b;
+  --comment-orange-bg: #3e2d24;
+  --comment-orange-text: #d19a69;
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -172,7 +272,7 @@
   --destructive-foreground: oklch(0.9851 0 89.88);
   --border: oklch(0.3208 0.0159 285.47);
   --input: oklch(0.4087 0.0149 285.72);
-  --ring: oklch(0.5429 0.2335 287.51);
+  --ring: var(--brand);
   --link: oklch(0.8851 0.0638 297.03);
   --link-hover: oklch(0.8167 0.0989 296.61);
   --selection: oklch(0.3867 0.0251 266.92);
@@ -195,6 +295,57 @@
   --param-operator: #FF85ED;
   --param-var: #8AD6FF;
   --param-error: #FE6C46;
+  /* === GDevelop 5 · DefaultDarkTheme (valores literales de theme.json) === */
+  /* Marca: Nexus Engine reutiliza la rampa morada oficial (única fuente de verdad) */
+  --brand: #7046ec;
+  --brand-dark: #4f28cd;
+  --brand-darkest: #37238f;
+  --brand-light: #c9b6fc;
+  --list-hover: #2f2f36;
+  --search-bar: #494952;
+  --hover-bg: rgba(255, 255, 255, 0.08);
+  --text-secondary: #c5c5c9;
+  --text-disabled: #9aa1ad;
+  --text-placeholder: #a6a6ab;
+  --tabs-bar: #32323b;
+  --tabs-text: #7f7f85;
+  --tabs-selected-bg: #494952;
+  --tabs-selected-text: #f6f2ff;
+  --closable-tab: #32323b;
+  --closable-tab-selected: #25252e;
+  --closable-tab-border: #7f7f85;
+  --toolbar-separator: #3e4452;
+  --grid-line: rgba(158, 180, 255, 0.8);
+  --select-indigo: #6868e8;
+  --table-header: #25252e;
+  --table-odd: #23232a;
+  --table-even: #1d1d26;
+  --table-border: #282c34;
+  --table-text: #abb2bf;
+  --table-text-header: #d6deec;
+  --tooltip: #494952;
+  --snackbar: #32323b;
+  /* event-sheet.* */
+  --ev-tree: #282c34;
+  --ev-ca-border: #32323b;
+  --ev-move-handle: #3e4452;
+  --ev-move-handle-hover: #6c7d96;
+  --ev-line: #494952;
+  --ev-selectable: rgba(0, 0, 0, 0.1);
+  --ev-sub-border: #3e4452;
+  --ev-warning: rgba(255, 188, 87, 0.13);
+  --ev-highlight: #3d4d51;
+  --ev-highlight-text: #e5c07b;
+  --ev-link-container: #3e4452;
+  --ev-selectable-link: #c678dd;
+  --param-error-bg: #fe6c4666;
+  --param-warning: #fb9600;
+  --comment-green-bg: #2d3e2c;
+  --comment-green-text: #98c379;
+  --comment-yellow-bg: #3e3a24;
+  --comment-yellow-text: #e5c07b;
+  --comment-orange-bg: #3e2d24;
+  --comment-orange-text: #d19a69;
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);

@@ -1,199 +1,301 @@
+// The 40px action bar (`UI/Toolbar.js`): left = actions of the active tab,
+// right = scene picker + preview. Grid/snap/zoom live in the scene toolbar under
+// the canvas (like GDevelop), while the object/event commands sit here.
+
+import { useState } from "react";
 import {
-  Menu,
-  Undo2,
-  Redo2,
+  ChevronDown,
+  ClipboardCopy,
+  ClipboardPaste,
+  Clock,
+  Copy,
+  Eraser,
   Grid3x3,
   Magnet,
-  Eye,
+  Play,
+  Plus,
+  Redo2,
+  Save,
+  Scissors,
+  Smartphone,
+  SquareStack,
+  Undo2,
   ZoomIn,
   ZoomOut,
-  Play,
-  PanelLeft,
-  PanelRight,
-  Save,
-  Smartphone,
-  Loader2,
 } from "lucide-react";
-import { useState } from "react";
-import { toast } from "sonner";
 import { useEditor } from "@/lib/editor/store";
+import { S } from "@/lib/editor/i18n";
 import { saveProjectEverywhere } from "@/lib/projects/save";
-import { PreviewDialog } from "./PreviewDialog";
-import { AskAiDialog } from "./AskAiDialog";
+import {
+  clearClipboard,
+  clipboardSummary,
+  copyInstances,
+  copyObjects,
+  hasClipboard,
+  pasteInto,
+} from "@/lib/editor/clipboard";
 import { cn } from "@/lib/utils";
+import { GdMenu, IconButton, type MenuEntry } from "./gd/kit";
 
-function TButton({
-  title,
-  active,
-  disabled,
-  onClick,
-  children,
-}: {
-  title: string;
-  active?: boolean;
-  disabled?: boolean;
-  onClick?: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      title={title}
-      aria-label={title}
-      aria-pressed={active}
-      disabled={disabled}
-      onClick={onClick}
-      className={cn(
-        "flex h-9 w-9 shrink-0 items-center justify-center rounded transition-colors md:h-7 md:w-7",
-        "text-muted-foreground hover:bg-elevated hover:text-foreground",
-        active && "bg-elevated text-link",
-        disabled && "opacity-35 hover:bg-transparent",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-const Sep = () => <div className="mx-1 h-5 w-px bg-separator" />;
+const Sep = () => <div className="mx-1 h-5 w-px shrink-0 bg-separator" />;
 
 export function TopToolbar() {
-  const { ui, dispatch, canUndo, canRedo, project } = useEditor();
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [askOpen, setAskOpen] = useState(false);
+  const { ui, dispatch, project, scene, canUndo, canRedo, dirty } = useEditor();
+  const [previewMenu, setPreviewMenu] = useState<{ x: number; y: number } | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const isEvents = ui.tab === "events";
+  const tab = ui.openedTabs.find((t) => t.id === ui.activeTabId);
+  const isProjectTab = !!tab && tab.kind !== "scene";
 
   const onSave = async () => {
     setSaving(true);
     try {
-      const result = await saveProjectEverywhere(project);
-      if (result.drive) toast.success("Guardado en el dispositivo y en Google Drive");
-      else if (result.driveError) toast.warning(`Guardado local. Drive: ${result.driveError}`);
-      else toast.success("Guardado en este dispositivo");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "No se pudo guardar");
+      await saveProjectEverywhere(project);
+      dispatch({ type: "markSaved" });
+    } catch {
+      /* ignore storage failures */
     } finally {
       setSaving(false);
     }
   };
 
-  return (
-    <div className="flex h-12 shrink-0 items-center gap-1 overflow-x-auto border-b border-separator bg-toolbar px-2 md:h-11 md:overflow-visible [&::-webkit-scrollbar]:h-0">
-      <TButton
-        title="Open the project manager"
-        onClick={() => dispatch({ type: "ui", patch: { projectManagerOpen: true } })}
-      >
-        <Menu className="h-4 w-4" />
-      </TButton>
+  const onPaste = () => {
+    if (!hasClipboard()) return;
+    const { objects, instances } = pasteInto(scene);
+    for (const object of objects) dispatch({ type: "addObject", object });
+    if (instances.length > 0) dispatch({ type: "addInstances", instances });
+    if (objects.length === 0 && instances.length === 0) {
+      window.alert?.("El portapapeles está vacío");
+    }
+  };
 
-      <div className="ml-1 hidden items-center gap-1 truncate text-xs text-muted-foreground md:flex">
-        <span className="truncate font-medium text-foreground">{project.name}</span>
-        <span className="text-separator">/</span>
-        <span className="truncate">Level 1</span>
-      </div>
+  const previewEntries: MenuEntry[] = [
+    {
+      id: "preview",
+      label: S.preview,
+      icon: <Play className="h-3.5 w-3.5" />,
+      onSelect: () =>
+        dispatch({ type: "ui", patch: { previewOpen: true, previewWithDebugger: false } }),
+    },
+    {
+      id: "debugger",
+      label: S.previewWithDebugger,
+      icon: <Clock className="h-3.5 w-3.5" />,
+      onSelect: () =>
+        dispatch({ type: "ui", patch: { previewOpen: true, previewWithDebugger: true } }),
+    },
+    {
+      id: "new-window",
+      label: S.previewInNewWindow,
+      onSelect: () => dispatch({ type: "ui", patch: { previewOpen: true } }),
+    },
+    {
+      id: "use-scene",
+      label: S.useThisSceneForPreviews,
+      separatorBefore: true,
+      disabled: isProjectTab,
+      onSelect: () => dispatch({ type: "updateGameSettings", patch: { startScene: scene.name } }),
+    },
+  ];
+
+  return (
+    <div className="flex h-10 shrink-0 items-center gap-0.5 overflow-x-auto border-b border-separator bg-toolbar px-2 text-[13px] [&::-webkit-scrollbar]:h-0">
+      <button
+        type="button"
+        title={S.save}
+        aria-label={S.save}
+        onClick={() => void onSave()}
+        className={cn(
+          "flex h-8 shrink-0 items-center gap-1.5 rounded px-2 text-[12px] hover:bg-hover-bg",
+          dirty ? "text-[#FFBC57]" : "text-muted-foreground",
+        )}
+      >
+        <Save className={cn("h-4 w-4", saving && "animate-spin")} />
+        <span className="hidden xl:inline">{dirty ? S.save : "Guardado"}</span>
+      </button>
 
       <Sep />
-      <TButton title="Guardar proyecto" disabled={saving} onClick={() => void onSave()}>
-        {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-      </TButton>
-      <TButton title="Undo" disabled={!canUndo} onClick={() => dispatch({ type: "undo" })}>
+      <IconButton
+        label={`${S.undo} (Ctrl+Z)`}
+        disabled={!canUndo}
+        onClick={() => dispatch({ type: "undo" })}
+      >
         <Undo2 className="h-4 w-4" />
-      </TButton>
-      <TButton title="Redo" disabled={!canRedo} onClick={() => dispatch({ type: "redo" })}>
+      </IconButton>
+      <IconButton
+        label={`${S.redo} (Ctrl+Shift+Z)`}
+        disabled={!canRedo}
+        onClick={() => dispatch({ type: "redo" })}
+      >
         <Redo2 className="h-4 w-4" />
-      </TButton>
+      </IconButton>
 
-      {ui.tab === "scene" && (
+      {!isEvents && (
         <>
           <Sep />
-          <TButton
-            title="Toggle grid"
-            active={ui.grid}
-            onClick={() => dispatch({ type: "ui", patch: { grid: !ui.grid } })}
+          <IconButton
+            label={`${S.copy} (Ctrl+C)`}
+            onClick={() => {
+              const ids = ui.selectedInstanceIds.length
+                ? ui.selectedInstanceIds
+                : ui.selectedObjectIds;
+              if (ui.selectedInstanceIds.length)
+                copyInstances(scene.instances.filter((i) => ids.includes(i.id)));
+              else copyObjects(scene.objects.filter((o) => ui.selectedObjectIds.includes(o.id)));
+            }}
           >
-            <Grid3x3 className="h-4 w-4" />
-          </TButton>
-          <TButton
-            title="Snap to grid"
-            active={ui.snap}
-            onClick={() => dispatch({ type: "ui", patch: { snap: !ui.snap } })}
+            <Copy className="h-4 w-4" />
+          </IconButton>
+          <IconButton
+            label={`${S.cut} (Ctrl+X)`}
+            onClick={() => {
+              if (ui.selectedInstanceIds.length) {
+                copyInstances(scene.instances.filter((i) => ui.selectedInstanceIds.includes(i.id)));
+                dispatch({ type: "deleteInstances", ids: ui.selectedInstanceIds });
+              } else if (ui.selectedObjectIds.length) {
+                copyObjects(scene.objects.filter((o) => ui.selectedObjectIds.includes(o.id)));
+                for (const id of ui.selectedObjectIds) dispatch({ type: "deleteObject", id });
+              }
+            }}
           >
-            <Magnet className="h-4 w-4" />
-          </TButton>
-          <TButton title="Show collision masks">
-            <Eye className="h-4 w-4" />
-          </TButton>
-          <Sep />
-          <TButton
-            title="Zoom out"
-            onClick={() =>
-              dispatch({ type: "ui", patch: { zoom: Math.max(0.25, +(ui.zoom - 0.1).toFixed(2)) } })
-            }
+            <Scissors className="h-4 w-4" />
+          </IconButton>
+          <IconButton
+            label={`${S.paste} (Ctrl+V)${hasClipboard() ? `: ${clipboardSummary()}` : ""}`}
+            disabled={!hasClipboard()}
+            onClick={onPaste}
           >
-            <ZoomOut className="h-4 w-4" />
-          </TButton>
-          <button
-            type="button"
-            onClick={() => dispatch({ type: "ui", patch: { zoom: 1 } })}
-            className="w-12 rounded px-1 py-0.5 text-center text-[11px] tabular-nums text-muted-foreground hover:bg-elevated hover:text-foreground"
-            title="Reset zoom"
+            <ClipboardPaste className="h-4 w-4" />
+          </IconButton>
+          <IconButton
+            label={`${S.duplicate} (Ctrl+D)`}
+            disabled={!ui.selectedInstanceIds.length && !ui.selectedObjectIds.length}
+            onClick={() => {
+              if (ui.selectedInstanceIds.length) {
+                dispatch({ type: "duplicateInstances", ids: ui.selectedInstanceIds });
+              } else {
+                for (const id of ui.selectedObjectIds) dispatch({ type: "duplicateObject", id });
+              }
+            }}
           >
-            {Math.round(ui.zoom * 100)}%
-          </button>
-          <TButton
-            title="Zoom in"
-            onClick={() =>
-              dispatch({ type: "ui", patch: { zoom: Math.min(3, +(ui.zoom + 0.1).toFixed(2)) } })
-            }
-          >
-            <ZoomIn className="h-4 w-4" />
-          </TButton>
+            <ClipboardCopy className="h-4 w-4" />
+          </IconButton>
+          <IconButton label={S.clearClipboard} disabled={!hasClipboard()} onClick={clearClipboard}>
+            <Eraser className="h-4 w-4" />
+          </IconButton>
         </>
       )}
 
-      <div className="hidden flex-1 md:block" />
+      {!isEvents && !isProjectTab && (
+        <>
+          <Sep />
+          <IconButton
+            label={S.toggleGrid}
+            active={scene.grid.show}
+            onClick={() => dispatch({ type: "updateGrid", patch: { show: !scene.grid.show } })}
+          >
+            <Grid3x3 className="h-4 w-4" />
+          </IconButton>
+          <IconButton
+            label={S.snapToGrid}
+            active={scene.grid.snap}
+            onClick={() => dispatch({ type: "updateGrid", patch: { snap: !scene.grid.snap } })}
+          >
+            <Magnet className="h-4 w-4" />
+          </IconButton>
+          <Sep />
+          <IconButton
+            label={S.zoomOut}
+            onClick={() => dispatch({ type: "ui", patch: { zoom: Math.max(0.1, ui.zoom / 1.25) } })}
+          >
+            <ZoomOut className="h-4 w-4" />
+          </IconButton>
+          <button
+            type="button"
+            title={S.zoomReset}
+            onClick={() => dispatch({ type: "ui", patch: { zoom: 1, pan: { x: 0, y: 0 } } })}
+            className="h-8 w-14 shrink-0 rounded px-1 text-center text-[12px] tabular-nums text-muted-foreground hover:bg-hover-bg hover:text-foreground"
+          >
+            {Math.round(ui.zoom * 100)}%
+          </button>
+          <IconButton
+            label={S.zoomIn}
+            onClick={() => dispatch({ type: "ui", patch: { zoom: Math.min(8, ui.zoom * 1.25) } })}
+          >
+            <ZoomIn className="h-4 w-4" />
+          </IconButton>
+        </>
+      )}
 
-      <div className="hidden md:contents">
-        <TButton
-          title="Toggle left panel"
-          active={ui.showLeftPanel}
-          onClick={() => dispatch({ type: "ui", patch: { showLeftPanel: !ui.showLeftPanel } })}
+      <div className="min-w-2 flex-1" />
+
+      {!isEvents && !isProjectTab && (
+        <>
+          <IconButton
+            label={S.sceneProperties}
+            onClick={() => dispatch({ type: "openDialog", dialog: { name: "sceneProperties" } })}
+          >
+            <SquareStack className="h-4 w-4" />
+          </IconButton>
+          <button
+            type="button"
+            onClick={() => dispatch({ type: "openDialog", dialog: { name: "newObject" } })}
+            className="flex h-8 shrink-0 items-center gap-1.5 rounded bg-primary px-3 text-[12px] font-medium text-primary-foreground hover:bg-[#5C36D6]"
+          >
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">{S.addANewObject}</span>
+          </button>
+        </>
+      )}
+      {isEvents && (
+        <button
+          type="button"
+          onClick={() => window.alert?.(S.firstEventHelp)}
+          className="flex h-8 shrink-0 items-center gap-1 rounded px-2 text-[12px] text-link hover:bg-hover-bg"
         >
-          <PanelLeft className="h-4 w-4" />
-        </TButton>
-        <TButton
-          title="Toggle right panel"
-          active={ui.showRightPanel}
-          onClick={() => dispatch({ type: "ui", patch: { showRightPanel: !ui.showRightPanel } })}
-        >
-          <PanelRight className="h-4 w-4" />
-        </TButton>
-      </div>
+          {S.help}
+        </button>
+      )}
+
       <Sep />
-      <TButton title="Preview on device">
+      <IconButton
+        label="Vista previa en dispositivo"
+        onClick={() => dispatch({ type: "ui", patch: { previewOpen: true } })}
+      >
         <Smartphone className="h-4 w-4" />
-      </TButton>
-      <button
-        type="button"
-        onClick={() => setPreviewOpen(true)}
-        className="sticky right-0 ml-1 flex h-9 shrink-0 items-center gap-1.5 rounded bg-success px-3 shadow-[-8px_0_8px_-6px_var(--toolbar)] md:static md:shadow-none text-[11px] font-semibold uppercase tracking-wide text-window transition-opacity hover:opacity-90 md:h-7"
-      >
-        <Play className="h-3.5 w-3.5 fill-current" />
-        Preview
-      </button>
-      <button
-        type="button"
-        onClick={() => setAskOpen(true)}
-        className="ml-1 flex h-9 shrink-0 items-center gap-1.5 rounded px-2 text-[11px] font-bold text-foreground hover:bg-elevated md:h-7"
-      >
-        <span
-          className="size-5 rounded-md bg-gradient-to-br from-[#FFBC57] via-[#FF8569] to-[#7046EC]"
-          aria-hidden
+      </IconButton>
+      <div className="flex shrink-0 items-center">
+        <button
+          type="button"
+          onClick={() =>
+            dispatch({ type: "ui", patch: { previewOpen: true, previewWithDebugger: false } })
+          }
+          className="flex h-8 items-center gap-1.5 rounded-l bg-success px-3 text-[12px] font-semibold text-[#1D1D26] hover:opacity-90"
+        >
+          <Play className="h-3.5 w-3.5 fill-current" />
+          <span className="hidden sm:inline">{S.preview}</span>
+        </button>
+        <button
+          type="button"
+          aria-label={S.previewWithDebugger}
+          onClick={(event) => {
+            const rect = event.currentTarget.getBoundingClientRect();
+            setPreviewMenu({ x: rect.right - 190, y: rect.bottom + 4 });
+          }}
+          className="flex h-8 items-center rounded-r bg-success/85 px-1 text-[#1D1D26] hover:bg-success"
+        >
+          <ChevronDown className="h-4 w-4" />
+        </button>
+      </div>
+
+      {previewMenu ? (
+        <GdMenu
+          entries={previewEntries}
+          anchor={previewMenu}
+          onClose={() => setPreviewMenu(null)}
         />
-        Ask AI
-      </button>
-      <PreviewDialog open={previewOpen} onOpenChange={setPreviewOpen} />
-      <AskAiDialog open={askOpen} onOpenChange={setAskOpen} />
+      ) : null}
     </div>
   );
 }

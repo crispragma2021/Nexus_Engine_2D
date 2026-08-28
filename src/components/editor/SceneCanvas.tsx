@@ -1,138 +1,963 @@
-import * as React from "react";
-import { useEditor } from "@/lib/editor/store";
-import { cn } from "@/lib/utils";
+// Scene canvas — the port of GDevelop's `InstancesRenderer`: a zoomed, pannable
+// view of the scene with the window frame, the grid, drag-to-move instances,
+// rubber-band selection, resize handles, drop-to-create and the status bar.
+//
+// Drawing reuses the runtime renderer (one code path for the editor and the game),
+// exactly like GDevelop reuses Pixi for both; the selection UI is drawn on top.
 
-const GRID = 32;
+import * as React from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEditor } from "@/lib/editor/store";
+import { renderScene } from "@/lib/runtime/renderer";
+import type { RTLayer, RTObject, RuntimeState } from "@/lib/runtime/types";
+import { resolveAsset } from "@/lib/editor/catalog";
+import { DND_OBJECT, DND_RESOURCE, readDropPayload } from "@/lib/editor/dnd";
+import type { GDInstance, GDScene } from "@/lib/editor/types";
+import { cn } from "@/lib/utils";
+import { useContextMenu, type MenuEntry } from "./gd/kit";
+import { S } from "@/lib/editor/i18n";
+import { copyInstances, cutInstances, hasClipboard, pasteInto } from "@/lib/editor/clipboard";
+
+const HANDLE = 7;
+type HandleId = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "rotate";
+
+const rgb = (value: string) => {
+  const parts = value.split(";").map((part) => Math.max(0, Math.min(255, Number(part) || 0)));
+  return `rgb(${parts[0] ?? 0}, ${parts[1] ?? 0}, ${parts[2] ?? 0})`;
+};
+
+/** Editor projection of the scene into the runtime shape the renderer consumes. */
+function buildEditorState(
+  scene: GDScene,
+  options: { showHidden: boolean },
+): { state: RuntimeState; byInstance: Map<string, RTObject> } {
+  const layers: Record<string, RTLayer> = {};
+  const baseName = scene.layers[0]?.name;
+  for (const layer of scene.layers) {
+    const isBase = layer.name === baseName;
+    const follows = !isBase && layer.followBaseLayer !== false;
+    layers[layer.name] = {
+      name: layer.name,
+      visible: layer.visible,
+      cameraX: follows ? 0 : layer.camera.x,
+      cameraY: follows ? 0 : layer.camera.y,
+      cameraZoom: 1,
+      opacity: 255,
+      followBaseLayer: follows,
+    };
+  }
+  const byInstance = new Map<string, RTObject>();
+  const objects: RTObject[] = [];
+  for (const instance of scene.instances) {
+    const def = scene.objects.find((o) => o.id === instance.objectId);
+    if (!def) continue;
+    if (instance.hiddenAtStart && !options.showHidden) continue;
+    const animation = def.animations?.[0];
+    const object: RTObject = {
+      id: instance.id,
+      name: def.name,
+      type: def.type,
+      ...(def.asset ? { asset: def.asset } : {}),
+      x: instance.x,
+      y: instance.y,
+      width: instance.width,
+      height: instance.height,
+      angle: instance.angle,
+      zOrder: instance.zOrder,
+      layer: instance.layer,
+      opacity: 255,
+      hidden: def.instancesHidden === true,
+      flipX: false,
+      flipY: false,
+      text: def.text ?? "",
+      textColor: hexOf(def.textColor),
+      textSize: def.textSize ?? 24,
+      bold: def.bold ?? false,
+      alignment: def.alignment ?? "left",
+      animationIndex: 0,
+      timeBetweenFrames: animation?.timeBetweenFrames ?? 0,
+      animationSpeedScale: 1,
+      animationName: "",
+      frameIndex: 0,
+      frameTimer: 0,
+      behaviors: def.behaviors.map((b) => b.name),
+      behaviorTypes: Object.fromEntries(def.behaviors.map((b) => [b.name, b.type])),
+      behaviorProps: Object.fromEntries(def.behaviors.map((b) => [b.name, b.properties])),
+      controls: { left: false, right: false, up: false, down: false, jump: false },
+      ignoreControls: false,
+      onFloor: false,
+      jumping: false,
+      falling: false,
+      vx: 0,
+      vy: 0,
+      gravity: 0,
+      maxFallingSpeed: 0,
+      friction: 0,
+      health: 0,
+      maxHealth: 0,
+      flash: { active: false, elapsed: 0, duration: 0, half: 0, hidden: false },
+      tweens: {},
+      tint: tintOf(instance.effects.length ? instance.effects : def.effects),
+      colorOverlay: null,
+      variables: {},
+      destroyed: false,
+    };
+    const image = animation?.images?.[0]?.image ?? def.asset;
+    if (image) object.asset = image;
+    byInstance.set(instance.id, object);
+    objects.push(object);
+  }
+  const base = layers[scene.layers[0]?.name ?? "Base layer"];
+  return {
+    byInstance,
+    state: {
+      objects,
+      layers,
+      variables: {},
+      globalVariables: {},
+      timers: {},
+      pausedTimers: {},
+      camera: { x: base?.cameraX ?? 0, y: base?.cameraY ?? 0 },
+      time: 0,
+      timeScale: 1,
+      frame: 0,
+      sceneName: scene.name,
+      logs: [],
+      paused: false,
+      stats: { objectsCount: objects.length, instructionsCount: 0, eventsCount: 0, frameTimeMs: 0 },
+    },
+  };
+}
+
+const hexOf = (value?: string) => {
+  if (!value) return "#FAFAFA";
+  if (value.startsWith("#")) return value;
+  const parts = value.split(";").map((p) => Number(p) || 0);
+  return `#${parts.map((p) => Math.max(0, Math.min(255, p)).toString(16).padStart(2, "0")).join("")}`;
+};
+
+function tintOf(effects: { type: string; parameters: Record<string, string> }[]) {
+  const tint = effects.find(
+    (effect) => effect.type === "Tint" && effect.parameters["disabled"] !== "yes",
+  );
+  if (!tint) return null;
+  return [
+    Number(tint.parameters["r"] ?? 255),
+    Number(tint.parameters["g"] ?? 255),
+    Number(tint.parameters["b"] ?? 255),
+  ] as [number, number, number];
+}
+
+interface View {
+  scale: number;
+  offsetX: number;
+  offsetY: number;
+}
 
 export function SceneCanvas() {
-  const { project, ui, dispatch } = useEditor();
-  const ref = React.useRef<HTMLDivElement>(null);
-  const drag = React.useRef<{ id: string; dx: number; dy: number } | null>(null);
+  const { scene, ui, dispatch, project } = useEditor();
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [size, setSize] = useState({ width: 800, height: 600 });
+  const [hover, setHover] = useState<{ x: number; y: number } | null>(null);
+  const [drag, setDrag] = useState<
+    | {
+        kind: "move";
+        start: { x: number; y: number };
+        origin: Map<string, { x: number; y: number }>;
+      }
+    | {
+        kind: "resize";
+        handle: HandleId;
+        start: { x: number; y: number };
+        origin: { x: number; y: number; width: number; height: number };
+      }
+    | {
+        kind: "rotate";
+        start: number;
+        originAngle: number;
+        center: { x: number; y: number };
+        id: string;
+      }
+    | {
+        kind: "marquee";
+        start: { x: number; y: number };
+        current: { x: number; y: number };
+        additive: boolean;
+      }
+    | { kind: "pan"; start: { x: number; y: number }; origin: { x: number; y: number } }
+    | null
+  >(null);
+  const { open, menu } = useContextMenu();
 
-  const toScene = (clientX: number, clientY: number) => {
-    const rect = ref.current!.getBoundingClientRect();
-    return { x: (clientX - rect.left) / ui.zoom, y: (clientY - rect.top) / ui.zoom };
-  };
+  const windowSize = useMemo(() => {
+    const width = scene.useCustomWindowSize
+      ? (scene.customWindowWidth ?? project.gameSettings.windowWidth)
+      : project.gameSettings.windowWidth;
+    const height = scene.useCustomWindowSize
+      ? (scene.customWindowHeight ?? project.gameSettings.windowHeight)
+      : project.gameSettings.windowHeight;
+    return { width: width || 800, height: height || 600 };
+  }, [
+    scene.useCustomWindowSize,
+    scene.customWindowWidth,
+    scene.customWindowHeight,
+    project.gameSettings.windowWidth,
+    project.gameSettings.windowHeight,
+  ]);
 
-  const onPointerDown = (e: React.PointerEvent, id: string, x: number, y: number) => {
-    e.stopPropagation();
-    dispatch({ type: "selectInstance", id, additive: e.shiftKey });
-    const p = toScene(e.clientX, e.clientY);
-    drag.current = { id, dx: p.x - x, dy: p.y - y };
-    (e.target as Element).setPointerCapture(e.pointerId);
-  };
+  const magnification = scene.magnification && scene.magnification > 0 ? scene.magnification : 1;
 
-  const onPointerMove = (e: React.PointerEvent) => {
-    const d = drag.current;
-    if (!d) return;
-    const p = toScene(e.clientX, e.clientY);
-    let x = Math.round(p.x - d.dx);
-    let y = Math.round(p.y - d.dy);
-    if (ui.snap) {
-      x = Math.round(x / GRID) * GRID;
-      y = Math.round(y / GRID) * GRID;
+  const view = useMemo<View>(() => {
+    const fit = Math.min(
+      (size.width - 32) / (windowSize.width * magnification),
+      (size.height - 32) / (windowSize.height * magnification),
+    );
+    const scale = ui.zoom * magnification;
+    const centeredX = (size.width - windowSize.width * scale) / 2;
+    const centeredY = (size.height - windowSize.height * scale) / 2;
+    return {
+      scale,
+      // GDevelop starts with the window top-left at the view origin; keep it
+      // centered when the window is smaller than the viewport (fit < 1 case).
+      offsetX: (fit < 1 ? centeredX : 0) + ui.pan.x,
+      offsetY: (fit < 1 ? centeredY : 0) + ui.pan.y,
+    };
+    // `fit` only decides the centering, so it is fine to depend on size/zoom.
+  }, [
+    size.width,
+    size.height,
+    ui.zoom,
+    ui.pan.x,
+    ui.pan.y,
+    windowSize.width,
+    windowSize.height,
+    magnification,
+  ]);
+
+  const toWorld = useCallback(
+    (point: { x: number; y: number }) => ({
+      x: (point.x - view.offsetX) / view.scale,
+      y: (point.y - view.offsetY) / view.scale,
+    }),
+    [view.offsetX, view.offsetY, view.scale],
+  );
+
+  const editorView = useMemo(
+    () => buildEditorState(scene, { showHidden: ui.showHiddenInstances }),
+    [scene, ui.showHiddenInstances],
+  );
+
+  const snapValue = useCallback(
+    (value: number, step: number) => (scene.grid.snap ? Math.round(value / step) * step : value),
+    [scene.grid.snap],
+  );
+
+  /* ---------------------------------------------------------------- drawing */
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const wrap = wrapRef.current;
+    if (!canvas || !wrap) return;
+    const observer = new ResizeObserver(() => {
+      const rect = wrap.getBoundingClientRect();
+      setSize({
+        width: Math.max(120, Math.floor(rect.width)),
+        height: Math.max(120, Math.floor(rect.height)),
+      });
+    });
+    observer.observe(wrap);
+    return () => observer.disconnect();
+  }, []);
+
+  const draw = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    if (canvas.width !== size.width * dpr || canvas.height !== size.height * dpr) {
+      canvas.width = size.width * dpr;
+      canvas.height = size.height * dpr;
     }
-    dispatch({ type: "moveInstance", id: d.id, x, y });
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, size.width, size.height);
+    ctx.fillStyle = "#101017";
+    ctx.fillRect(0, 0, size.width, size.height);
+
+    // Instances (the runtime renderer draws the window background, the grid is
+    // drawn in the same world transform, then selection on top).
+    ctx.save();
+    ctx.translate(view.offsetX, view.offsetY);
+    ctx.scale(view.scale, view.scale);
+    ctx.beginPath();
+    ctx.rect(0, 0, windowSize.width, windowSize.height);
+    ctx.clip();
+    renderScene(ctx, editorView.state, {
+      width: windowSize.width,
+      height: windowSize.height,
+      background: rgb(scene.backgroundColor),
+      resolve: resolveAsset,
+      scale: 1,
+      offsetX: 0,
+      offsetY: 0,
+      showHitMasks: ui.showHitMasks,
+    });
+    drawGrid(ctx, scene, windowSize);
+    ctx.restore();
+
+    ctx.save();
+    ctx.translate(view.offsetX, view.offsetY);
+    ctx.scale(view.scale, view.scale);
+
+    // Selection, handles and marquee, in world space.
+    for (const id of ui.selectedInstanceIds) {
+      const object = editorView.byInstance.get(id);
+      if (!object) continue;
+      drawSelection(ctx, object, view.scale);
+    }
+    if (drag?.kind === "marquee") {
+      const a = toWorld(drag.start);
+      const b = toWorld(drag.current);
+      ctx.save();
+      ctx.strokeStyle = "#6868E8";
+      ctx.fillStyle = "rgba(104,104,232,0.18)";
+      ctx.lineWidth = 1 / view.scale;
+      const rect = {
+        x: Math.min(a.x, b.x),
+        y: Math.min(a.y, b.y),
+        w: Math.abs(b.x - a.x),
+        h: Math.abs(b.y - a.y),
+      };
+      ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+      ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+      ctx.restore();
+    }
+    ctx.restore();
+
+    // Window mask: darken everything outside the game area.
+    if (ui.windowMask && project.gameSettings.renderOutsideGameArea !== true) {
+      ctx.save();
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      const left = view.offsetX;
+      const top = view.offsetY;
+      const w = windowSize.width * view.scale;
+      const h = windowSize.height * view.scale;
+      ctx.fillRect(0, 0, size.width, Math.max(0, top));
+      ctx.fillRect(0, top + h, size.width, Math.max(0, size.height - top - h));
+      ctx.fillRect(0, top, Math.max(0, left), h);
+      ctx.fillRect(left + w, top, Math.max(0, size.width - left - w), h);
+      ctx.restore();
+    }
+
+    // Window border.
+    ctx.save();
+    ctx.strokeStyle = "rgba(255,255,255,0.18)";
+    ctx.lineWidth = 1;
+    ctx.strokeRect(
+      view.offsetX - 0.5,
+      view.offsetY - 0.5,
+      windowSize.width * view.scale + 1,
+      windowSize.height * view.scale + 1,
+    );
+    ctx.restore();
+
+    // Hover highlight.
+    if (hover) {
+      const world = toWorld(hover);
+      const hit = hitTest(editorView.state.objects, world.x, world.y);
+      if (hit && !ui.selectedInstanceIds.includes(hit.id)) {
+        ctx.save();
+        ctx.translate(view.offsetX, view.offsetY);
+        ctx.scale(view.scale, view.scale);
+        ctx.strokeStyle = "rgba(74,176,228,0.55)";
+        ctx.lineWidth = 1 / view.scale;
+        ctx.strokeRect(hit.x, hit.y, hit.width, hit.height);
+        ctx.restore();
+      }
+    }
+  }, [
+    size.width,
+    size.height,
+    view,
+    scene,
+    windowSize,
+    ui.showHitMasks,
+    ui.selectedInstanceIds,
+    ui.windowMask,
+    hover,
+    drag,
+    editorView,
+    project.gameSettings.renderOutsideGameArea,
+    toWorld,
+  ]);
+
+  useEffect(() => {
+    draw();
+  }, [draw]);
+
+  /* ------------------------------------------------------------ hit testing */
+  const handleAt = useCallback(
+    (point: { x: number; y: number }): HandleId | null => {
+      if (ui.selectedInstanceIds.length !== 1) return null;
+      const object = editorView.byInstance.get(ui.selectedInstanceIds[0]!);
+      if (!object) return null;
+      const box = {
+        x: view.offsetX + object.x * view.scale,
+        y: view.offsetY + object.y * view.scale,
+        w: object.width * view.scale,
+        h: object.height * view.scale,
+      };
+      const points: Record<HandleId, { x: number; y: number }> = {
+        nw: { x: box.x, y: box.y },
+        n: { x: box.x + box.w / 2, y: box.y },
+        ne: { x: box.x + box.w, y: box.y },
+        e: { x: box.x + box.w, y: box.y + box.h / 2 },
+        se: { x: box.x + box.w, y: box.y + box.h },
+        s: { x: box.x + box.w / 2, y: box.y + box.h },
+        sw: { x: box.x, y: box.y + box.h },
+        w: { x: box.x, y: box.y + box.h / 2 },
+        rotate: { x: box.x + box.w / 2, y: box.y - 24 },
+      };
+      for (const [id, position] of Object.entries(points)) {
+        if (Math.abs(point.x - position.x) <= HANDLE && Math.abs(point.y - position.y) <= HANDLE) {
+          return id as HandleId;
+        }
+      }
+      return null;
+    },
+    [editorView, ui.selectedInstanceIds, view],
+  );
+
+  const localPoint = (event: React.PointerEvent | React.MouseEvent) => {
+    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    return { x: event.clientX - rect.left, y: event.clientY - rect.top };
   };
 
-  const endDrag = () => {
-    drag.current = null;
+  const onPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (event.button === 1 || (event.button === 0 && event.altKey)) {
+      setDrag({
+        kind: "pan",
+        start: { x: event.clientX, y: event.clientY },
+        origin: { ...ui.pan },
+      });
+      (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
+      return;
+    }
+    if (event.button !== 0) return;
+    const point = localPoint(event);
+    const handle = handleAt(point);
+    const world = toWorld(point);
+
+    if (handle && ui.selectedInstanceIds.length === 1) {
+      const id = ui.selectedInstanceIds[0]!;
+      const object = editorView.byInstance.get(id);
+      if (handle === "rotate" && object) {
+        const center = { x: object.x + object.width / 2, y: object.y + object.height / 2 };
+        setDrag({
+          kind: "rotate",
+          id,
+          center,
+          originAngle: object.angle,
+          start: (Math.atan2(world.y - center.y, world.x - center.x) * 180) / Math.PI,
+        });
+        event.currentTarget.setPointerCapture(event.pointerId);
+        return;
+      }
+      if (object) {
+        setDrag({
+          kind: "resize",
+          handle,
+          start: point,
+          origin: { x: object.x, y: object.y, width: object.width, height: object.height },
+        });
+        event.currentTarget.setPointerCapture(event.pointerId);
+        return;
+      }
+    }
+
+    const hit = hitTest(editorView.state.objects, world.x, world.y);
+    if (!hit) {
+      if (!event.shiftKey) dispatch({ type: "selectInstances", ids: [] });
+      setDrag({ kind: "marquee", start: point, current: point, additive: event.shiftKey });
+      event.currentTarget.setPointerCapture(event.pointerId);
+      return;
+    }
+    let ids = ui.selectedInstanceIds;
+    if (event.shiftKey) {
+      ids = ids.includes(hit.id) ? ids.filter((i) => i !== hit.id) : [...ids, hit.id];
+      dispatch({ type: "selectInstances", ids });
+      return;
+    }
+    if (!ids.includes(hit.id)) {
+      ids = [hit.id];
+      dispatch({ type: "selectInstances", ids });
+    }
+    const origin = new Map<string, { x: number; y: number }>();
+    for (const id of ids) {
+      const object = editorView.byInstance.get(id);
+      if (object) origin.set(id, { x: object.x, y: object.y });
+    }
+    setDrag({ kind: "move", start: world, origin });
+    event.currentTarget.setPointerCapture(event.pointerId);
   };
 
-  const visibleLayers = new Set(project.layers.filter((l) => l.visible).map((l) => l.name));
-  const instances = [...project.instances]
-    .filter((i) => visibleLayers.has(i.layer))
-    .sort((a, b) => a.zOrder - b.zOrder);
+  const onPointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const point = localPoint(event);
+    setHover(point);
+    dispatch({
+      type: "ui",
+      patch: {
+        cursorPosition: { x: Math.round(toWorld(point).x), y: Math.round(toWorld(point).y) },
+      },
+    });
+    if (!drag) return;
+    if (drag.kind === "pan") {
+      dispatch({
+        type: "ui",
+        patch: {
+          pan: {
+            x: drag.origin.x + (event.clientX - drag.start.x),
+            y: drag.origin.y + (event.clientY - drag.start.y),
+          },
+        },
+      });
+      return;
+    }
+    const world = toWorld(point);
+    if (drag.kind === "marquee") {
+      setDrag({ ...drag, current: point });
+      return;
+    }
+    if (drag.kind === "move") {
+      const dx = world.x - drag.start.x;
+      const dy = world.y - drag.start.y;
+      for (const [id, position] of drag.origin) {
+        dispatch({
+          type: "moveInstances",
+          ids: [id],
+          dx: snapValue(position.x + dx, scene.grid.width) - position.x,
+          dy: snapValue(position.y + dy, scene.grid.height) - position.y,
+        });
+      }
+      return;
+    }
+    if (drag.kind === "rotate") {
+      const angle = (Math.atan2(world.y - drag.center.y, world.x - drag.center.x) * 180) / Math.PI;
+      const next = drag.originAngle + (angle - drag.start);
+      dispatch({
+        type: "updateInstance",
+        id: drag.id,
+        patch: { angle: Math.round(event.shiftKey ? Math.round(next / 15) * 15 : next) },
+      });
+      return;
+    }
+    if (drag.kind === "resize") {
+      const id = ui.selectedInstanceIds[0];
+      if (!id) return;
+      const dx = (point.x - drag.start.x) / view.scale;
+      const dy = (point.y - drag.start.y) / view.scale;
+      const origin = drag.origin;
+      let x = origin.x;
+      let y = origin.y;
+      let width = origin.width;
+      let height = origin.height;
+      if (drag.handle.includes("w")) {
+        x = snapValue(origin.x + dx, scene.grid.width);
+        width = Math.max(4, origin.width + (origin.x - x));
+      }
+      if (drag.handle.includes("e")) {
+        width = Math.max(4, snapValue(origin.width + dx, scene.grid.width));
+      }
+      if (drag.handle.includes("n")) {
+        y = snapValue(origin.y + dy, scene.grid.height);
+        height = Math.max(4, origin.height + (origin.y - y));
+      }
+      if (drag.handle.includes("s")) {
+        height = Math.max(4, snapValue(origin.height + dy, scene.grid.height));
+      }
+      dispatch({
+        type: "updateInstance",
+        id,
+        patch: { x, y, width, height, customSize: true },
+      });
+    }
+  };
+
+  const onPointerUp = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (drag?.kind === "marquee") {
+      const a = toWorld(drag.start);
+      const b = toWorld(drag.current);
+      const box = {
+        x: Math.min(a.x, b.x),
+        y: Math.min(a.y, b.y),
+        w: Math.abs(b.x - a.x),
+        h: Math.abs(b.y - a.y),
+      };
+      const ids = editorView.state.objects
+        .filter(
+          (object) =>
+            object.x < box.x + box.w &&
+            object.x + object.width > box.x &&
+            object.y < box.y + box.h &&
+            object.y + object.height > box.y,
+        )
+        .map((object) => object.id);
+      if (ids.length > 0 || !drag.additive) {
+        dispatch({
+          type: "selectInstances",
+          ids: drag.additive ? [...new Set([...ui.selectedInstanceIds, ...ids])] : ids,
+        });
+      }
+    }
+    setDrag(null);
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {
+      /* pointer capture may already be gone */
+    }
+  };
+
+  const onWheel = (event: React.WheelEvent<HTMLCanvasElement>) => {
+    if (event.ctrlKey || event.metaKey) {
+      event.preventDefault();
+      const next = ui.zoom * (event.deltaY < 0 ? 1.1 : 1 / 1.1);
+      dispatch({ type: "ui", patch: { zoom: Math.min(64, Math.max(0.02, next)) } });
+      return;
+    }
+    if (event.shiftKey) {
+      dispatch({ type: "ui", patch: { pan: { x: ui.pan.x - event.deltaY, y: ui.pan.y } } });
+      return;
+    }
+    dispatch({
+      type: "ui",
+      patch: { pan: { x: ui.pan.x - event.deltaX, y: ui.pan.y - event.deltaY } },
+    });
+  };
+
+  const onDoubleClick = (event: React.MouseEvent<HTMLCanvasElement>) => {
+    const world = toWorld(localPoint(event));
+    const hit = hitTest(editorView.state.objects, world.x, world.y);
+    if (!hit) return;
+    const object = scene.objects.find((o) => o.name === hit.name);
+    if (object)
+      dispatch({ type: "openDialog", dialog: { name: "objectEditor", objectId: object.id } });
+  };
+
+  const onDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    const payload = readDropPayload(event);
+    if (!payload) return;
+    const world = toWorld({ x: event.nativeEvent.offsetX, y: event.nativeEvent.offsetY });
+    if (payload.kind === "object") {
+      const object = scene.objects.find((o) => o.name === payload.value);
+      if (!object) return;
+      dispatch({
+        type: "addInstance",
+        objectId: object.id,
+        x: snapValue(world.x, scene.grid.width),
+        y: snapValue(world.y, scene.grid.height),
+      });
+      return;
+    }
+    // A resource dropped on the scene creates (or reuses) a sprite using it.
+    const name = payload.value.replace(/\.[a-z0-9]+$/i, "");
+    const existing = scene.objects.find((o) => o.name === name);
+    dispatch({
+      type: "addObject",
+      object: {
+        name: existing
+          ? uniqueName(
+              name,
+              scene.objects.map((o) => o.name),
+            )
+          : name,
+        type: "Sprite",
+        asset: payload.value,
+        animations: [],
+        effects: [],
+        behaviors: [],
+        variables: [],
+      },
+    });
+  };
+
+  const contextMenuEntries = (event: React.MouseEvent<HTMLCanvasElement>): MenuEntry[] => {
+    const world = toWorld(localPoint(event));
+    const hit = hitTest(editorView.state.objects, world.x, world.y);
+    const selected = ui.selectedInstanceIds;
+    if (hit && !selected.includes(hit.id)) dispatch({ type: "selectInstances", ids: [hit.id] });
+    const instances: GDInstance[] = selected
+      .map((id) => scene.instances.find((i) => i.id === id))
+      .filter((i): i is GDInstance => !!i);
+    return [
+      {
+        id: "front",
+        label: S.bringToFront,
+        disabled: instances.length === 0,
+        onSelect: () => dispatch({ type: "setInstancesZOrder", ids: selected, mode: "front" }),
+      },
+      {
+        id: "back",
+        label: S.sendToBack,
+        disabled: instances.length === 0,
+        onSelect: () => dispatch({ type: "setInstancesZOrder", ids: selected, mode: "back" }),
+      },
+      {
+        id: "duplicate",
+        label: S.duplicate,
+        disabled: instances.length === 0,
+        separatorBefore: true,
+        onSelect: () => dispatch({ type: "duplicateInstances", ids: selected }),
+      },
+      {
+        id: "copy",
+        label: S.copy,
+        disabled: instances.length === 0,
+        onSelect: () => copyInstances(instances),
+      },
+      {
+        id: "cut",
+        label: S.cut,
+        disabled: instances.length === 0,
+        onSelect: () => {
+          cutInstances(scene, selected);
+          dispatch({ type: "deleteInstances", ids: selected });
+        },
+      },
+      {
+        id: "paste",
+        label: S.paste,
+        disabled: !hasClipboard(),
+        onSelect: () => {
+          const { instances: next } = pasteInto(scene);
+          if (next.length) dispatch({ type: "addInstances", instances: next });
+        },
+      },
+      {
+        id: "hide",
+        label: instances.every((i) => i.hiddenAtStart) ? S.show : S.hide,
+        disabled: instances.length === 0,
+        separatorBefore: true,
+        onSelect: () => dispatch({ type: "toggleInstancesVisibility", ids: selected }),
+      },
+      {
+        id: "lock",
+        label: instances.every((i) => i.locked) ? S.unlock : S.lock,
+        disabled: instances.length === 0,
+        onSelect: () => dispatch({ type: "toggleInstancesLock", ids: selected }),
+      },
+      {
+        id: "delete",
+        label: S.delete,
+        danger: true,
+        disabled: instances.length === 0,
+        separatorBefore: true,
+        onSelect: () => dispatch({ type: "deleteInstances", ids: selected }),
+      },
+      {
+        id: "objects",
+        label: S.addANewObject,
+        separatorBefore: true,
+        onSelect: () => dispatch({ type: "openDialog", dialog: { name: "newObject" } }),
+      },
+    ];
+  };
+
+  const cursor =
+    drag?.kind === "move"
+      ? "grabbing"
+      : drag?.kind === "pan"
+        ? "move"
+        : hover && handleAt(hover)
+          ? handleCursor(handleAt(hover)!)
+          : "default";
 
   return (
-    <div
-      className="relative flex-1 overflow-auto bg-window no-select"
-      onPointerDown={() => dispatch({ type: "selectInstance", id: null })}
-    >
-      <div className="min-h-full min-w-full p-10">
-        <div
-          ref={ref}
-          className="relative origin-top-left shadow-[0_0_0_1px_var(--separator)]"
-          style={{
-            width: project.windowWidth,
-            height: project.windowHeight,
-            transform: `scale(${ui.zoom})`,
-            backgroundColor: "var(--window)",
-            backgroundImage: ui.grid
-              ? `linear-gradient(to right, color-mix(in oklab, var(--separator) 45%, transparent) 1px, transparent 1px),
-                 linear-gradient(to bottom, color-mix(in oklab, var(--separator) 45%, transparent) 1px, transparent 1px)`
-              : undefined,
-            backgroundSize: `${GRID}px ${GRID}px`,
-          }}
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-[#101017]">
+      <div
+        ref={wrapRef}
+        className="relative min-h-0 flex-1 overflow-hidden"
+        onDragOver={(event) => {
+          if (
+            event.dataTransfer.types.includes(DND_OBJECT) ||
+            event.dataTransfer.types.includes(DND_RESOURCE)
+          ) {
+            event.preventDefault();
+            event.dataTransfer.dropEffect = "copy";
+          }
+        }}
+        onDrop={onDrop}
+      >
+        <canvas
+          ref={canvasRef}
+          style={{ width: size.width, height: size.height, cursor }}
+          className="absolute inset-0 block touch-none select-none"
+          onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
-          onPointerUp={endDrag}
-          onPointerCancel={endDrag}
-        >
-          {/* scene origin */}
-          <div className="pointer-events-none absolute left-0 top-0 h-3 w-3 border-l-2 border-t-2 border-link/70" />
-
-          {instances.map((inst) => {
-            const obj = project.objects.find((o) => o.id === inst.objectId);
-            if (!obj) return null;
-            const selected = ui.selectedInstanceIds.includes(inst.id);
-            return (
-              <div
-                key={inst.id}
-                onPointerDown={(e) => onPointerDown(e, inst.id, inst.x, inst.y)}
-                className={cn("absolute cursor-move", selected && "outline outline-1 outline-link")}
-                style={{
-                  left: inst.x,
-                  top: inst.y,
-                  width: inst.width,
-                  height: inst.height,
-                  transform: `rotate(${inst.angle}deg)`,
-                  zIndex: inst.zOrder,
-                }}
-                title={obj.name}
-              >
-                {obj.type === "Text" ? (
-                  <span
-                    className="block whitespace-nowrap font-semibold"
-                    style={{ color: obj.textColor ?? "#FAFAFA", fontSize: obj.textSize ?? 24 }}
-                  >
-                    {obj.text}
-                  </span>
-                ) : (
-                  <img
-                    src={obj.asset}
-                    alt={obj.name}
-                    draggable={false}
-                    className="h-full w-full"
-                    style={{
-                      imageRendering: "pixelated",
-                      objectFit: obj.type === "Tiled Sprite" ? "fill" : "contain",
-                    }}
-                  />
-                )}
-                {selected && (
-                  <>
-                    {[
-                      "left-0 top-0",
-                      "right-0 top-0",
-                      "left-0 bottom-0",
-                      "right-0 bottom-0",
-                    ].map((pos) => (
-                      <span
-                        key={pos}
-                        className={cn(
-                          "absolute h-2 w-2 -translate-x-1/2 -translate-y-1/2 border border-window bg-link",
-                          pos,
-                        )}
-                        style={{ margin: 0 }}
-                      />
-                    ))}
-                  </>
-                )}
-              </div>
-            );
-          })}
-        </div>
+          onPointerUp={onPointerUp}
+          onPointerLeave={() => setHover(null)}
+          onWheel={onWheel}
+          onDoubleClick={onDoubleClick}
+          onContextMenu={(event) => open(event, contextMenuEntries(event))}
+        />
       </div>
+      <StatusBar />
+      {menu}
     </div>
   );
+}
+
+function StatusBar() {
+  const { ui, scene, project } = useEditor();
+  const { width, height } = useMemo(() => {
+    const w = scene.useCustomWindowSize
+      ? (scene.customWindowWidth ?? project.gameSettings.windowWidth)
+      : project.gameSettings.windowWidth;
+    const h = scene.useCustomWindowSize
+      ? (scene.customWindowHeight ?? project.gameSettings.windowHeight)
+      : project.gameSettings.windowHeight;
+    return { width: w, height: h };
+  }, [scene, project.gameSettings]);
+  return (
+    <div className="flex h-6 shrink-0 items-center gap-3 border-t border-separator bg-toolbar px-2 text-[11px] tabular-nums text-text-secondary">
+      <span className="w-24">
+        {ui.cursorPosition ? `${ui.cursorPosition.x};${ui.cursorPosition.y}` : "—"}
+      </span>
+      <span className="hidden md:inline">
+        Ventana: {width}×{height}
+      </span>
+      <span className="hidden lg:inline">
+        Capa: {scene.activeLayer} · {S.instances}: {scene.instances.length}
+      </span>
+      <span className="ml-auto">{Math.round(ui.zoom * 100)}%</span>
+      <span className={cn(scene.grid.show ? "text-[#8AD6FF]" : "")}>
+        {scene.grid.width}×{scene.grid.height}
+      </span>
+      <span>{ui.showHiddenInstances ? "Ocultas visibles" : "Ocultas ocultas"}</span>
+    </div>
+  );
+}
+
+function hitTest(objects: RTObject[], x: number, y: number): RTObject | undefined {
+  let best: RTObject | undefined;
+  for (const object of objects) {
+    if (object.hidden) continue;
+    if (
+      x >= object.x &&
+      x <= object.x + object.width &&
+      y >= object.y &&
+      y <= object.y + object.height
+    ) {
+      if (!best || object.zOrder >= best.zOrder) best = object;
+    }
+  }
+  return best;
+}
+
+function drawSelection(ctx: CanvasRenderingContext2D, object: RTObject, scale: number) {
+  ctx.save();
+  ctx.translate(object.x + object.width / 2, object.y + object.height / 2);
+  if (object.angle) ctx.rotate((object.angle * Math.PI) / 180);
+  ctx.translate(-object.width / 2, -object.height / 2);
+  ctx.strokeStyle = "#4AB0E4";
+  ctx.lineWidth = 1 / scale;
+  ctx.setLineDash([3 / scale, 2 / scale]);
+  ctx.strokeRect(0, 0, object.width, object.height);
+  ctx.setLineDash([]);
+
+  // Rotate stem.
+  ctx.beginPath();
+  ctx.moveTo(object.width / 2, 0);
+  ctx.lineTo(object.width / 2, -24 / scale);
+  ctx.stroke();
+
+  const handles: { x: number; y: number }[] = [
+    { x: 0, y: 0 },
+    { x: object.width / 2, y: 0 },
+    { x: object.width, y: 0 },
+    { x: object.width, y: object.height / 2 },
+    { x: object.width, y: object.height },
+    { x: object.width / 2, y: object.height },
+    { x: 0, y: object.height },
+    { x: 0, y: object.height / 2 },
+  ];
+  const size = HANDLE / scale;
+  ctx.fillStyle = "#FFFFFF";
+  ctx.strokeStyle = "#20202A";
+  for (const handle of handles) {
+    ctx.fillRect(handle.x - size / 2, handle.y - size / 2, size, size);
+    ctx.strokeRect(handle.x - size / 2, handle.y - size / 2, size, size);
+  }
+  // Rotate handle: circle.
+  ctx.beginPath();
+  ctx.arc(object.width / 2, -24 / scale, size * 0.7, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawGrid(
+  ctx: CanvasRenderingContext2D,
+  scene: GDScene,
+  windowSize: { width: number; height: number },
+) {
+  if (!scene.grid.show) return;
+  const { width: cellW, height: cellH, offsetX, offsetY, alpha, kind } = scene.grid;
+  const color = scene.grid.color.startsWith("#")
+    ? scene.grid.color
+    : `rgb(${scene.grid.color.split(";").join(",")})`;
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, Math.min(1, alpha));
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  if (kind === "isometric") {
+    const step = Math.max(4, cellW);
+    for (let x = -windowSize.height - offsetX; x < windowSize.width + step; x += step) {
+      ctx.moveTo(x, -offsetY);
+      ctx.lineTo(x + windowSize.height, windowSize.height - offsetY);
+      ctx.moveTo(x, -offsetY);
+      ctx.lineTo(x - windowSize.height, windowSize.height - offsetY);
+    }
+  } else {
+    for (let x = -offsetX; x <= windowSize.width; x += Math.max(2, cellW)) {
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, windowSize.height);
+    }
+    for (let y = -offsetY; y <= windowSize.height; y += Math.max(2, cellH)) {
+      ctx.moveTo(0, y);
+      ctx.lineTo(windowSize.width, y);
+    }
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+function handleCursor(handle: HandleId): string {
+  switch (handle) {
+    case "n":
+    case "s":
+      return "ns-resize";
+    case "e":
+    case "w":
+      return "ew-resize";
+    case "ne":
+    case "sw":
+      return "nesw-resize";
+    case "nw":
+    case "se":
+      return "nwse-resize";
+    case "rotate":
+      return "grab";
+  }
+}
+
+function uniqueName(base: string, taken: string[]): string {
+  let candidate = `${base}2`;
+  let index = 2;
+  while (taken.includes(candidate)) {
+    index += 1;
+    candidate = `${base}${index}`;
+  }
+  return candidate;
 }

@@ -1,92 +1,137 @@
+// Object groups — the second section of GDevelop's left column: scene groups and
+// global groups, with the member objects toggled from the object list.
+
 import * as React from "react";
-import { Search, Plus, Group, ChevronDown, ChevronRight } from "lucide-react";
-
-interface SectionProps {
-  title: string;
-  onAdd?: () => void;
-  addLabel?: string;
-  children: React.ReactNode;
-}
-
-function Section({ title, onAdd, addLabel, children }: SectionProps) {
-  const [open, setOpen] = React.useState(true);
-  return (
-    <div className="border-b border-separator/60">
-      <div className="flex items-center gap-1 px-2 py-2">
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          className="flex items-center gap-1 text-[15px] font-bold text-foreground"
-        >
-          {open ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-          {title}
-        </button>
-        {onAdd ? (
-          <button
-            type="button"
-            aria-label={addLabel ?? `Añadir a ${title}`}
-            onClick={onAdd}
-            className="ml-auto rounded p-1.5 text-foreground hover:bg-elevated"
-          >
-            <Plus className="h-5 w-5" />
-          </button>
-        ) : null}
-      </div>
-      {open ? <div className="pb-2 pl-7 pr-2">{children}</div> : null}
-    </div>
-  );
-}
+import { Check, Plus, SquareStack, Trash2 } from "lucide-react";
+import { useEditor } from "@/lib/editor/store";
+import { S } from "@/lib/editor/i18n";
+import { cn } from "@/lib/utils";
 
 export function GroupsPanel() {
-  const [query, setQuery] = React.useState("");
-  const [groups, setGroups] = React.useState<string[]>(["Enemigos", "Coleccionables"]);
-
-  const list = groups.filter((g) => g.toLowerCase().includes(query.toLowerCase()));
+  const { scene, ui, dispatch } = useEditor();
+  const [open, setOpen] = React.useState(true);
+  const [expanded, setExpanded] = React.useState<string | null>(null);
+  const groups = scene.groups ?? [];
 
   return (
-    <aside className="flex w-56 shrink-0 flex-col border-r border-separator bg-toolbar">
-      <div className="px-3 pb-1 pt-2 text-[15px] font-bold text-foreground md:text-[11px] md:font-semibold md:uppercase md:tracking-wide md:text-muted-foreground">
-        Grupos de objetos
-      </div>
-      <div className="p-2">
-        <div className="flex items-center gap-2 rounded bg-elevated px-3 py-2.5 md:py-1.5">
-          <Search className="h-4 w-4 text-muted-foreground" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Buscar grupos de objetos"
-            className="w-full bg-transparent text-[14px] outline-none placeholder:text-muted-foreground md:text-[12.5px]"
-          />
-        </div>
+    <div className="shrink-0 border-t border-separator bg-toolbar">
+      <div className="flex items-center gap-1 px-2 py-1.5">
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => setOpen((value) => !value)}
+          className="flex min-w-0 flex-1 items-center gap-1 rounded px-1 py-0.5 text-left text-[11px] font-semibold uppercase tracking-wide text-text-secondary hover:bg-list-hover hover:text-foreground"
+        >
+          <span className="text-[10px]">{open ? "▾" : "▸"}</span>
+          <span className="truncate">{S.objectGroups}</span>
+          <span className="ml-1 rounded bg-elevated px-1 text-[10px] tabular-nums">
+            {groups.length}
+          </span>
+        </button>
+        <button
+          type="button"
+          aria-label={S.objectGroups}
+          title={S.objectGroups}
+          onClick={() => dispatch({ type: "addObjectGroup" })}
+          className="grid h-6 w-6 place-items-center rounded text-text-secondary hover:bg-elevated hover:text-foreground"
+        >
+          <Plus className="h-3.5 w-3.5" />
+        </button>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <Section title="Grupos globales">
-          <p className="text-[14px] text-muted-foreground md:text-[12.5px]">
-            Todavía no hay ningún grupo global.
-          </p>
-        </Section>
-        <Section
-          title="Grupos de Escenas"
-          addLabel="Añadir un grupo"
-          onAdd={() => setGroups((g) => [...g, `Grupo ${g.length + 1}`])}
-        >
-          {list.length === 0 ? (
-            <p className="text-[14px] text-muted-foreground md:text-[12.5px]">
-              Empezar añadiendo un nuevo grupo.
+      {open ? (
+        <div className="pb-2">
+          {groups.length === 0 ? (
+            <p className="px-3 py-1 text-[12px] text-text-placeholder">
+              Aún no hay grupos de objetos.
             </p>
-          ) : (
-            list.map((g) => (
-              <div
-                key={g}
-                className="flex items-center gap-2 rounded px-1 py-2 text-[14px] text-foreground hover:bg-elevated md:py-1.5 md:text-[12.5px]"
-              >
-                <Group className="h-4 w-4 text-link" /> {g}
+          ) : null}
+          {groups.map((group) => {
+            const isExpanded = expanded === group.name;
+            return (
+              <div key={group.name}>
+                <div
+                  className={cn(
+                    "group mx-1 flex items-center gap-1.5 rounded px-1.5 py-[5px] text-[12.5px] hover:bg-list-hover",
+                    ui.selectedGroupName === group.name && "bg-selection",
+                  )}
+                  onClick={() => dispatch({ type: "ui", patch: { selectedGroupName: group.name } })}
+                >
+                  <SquareStack className="h-4 w-4 shrink-0 text-[#A483FF]" />
+                  <input
+                    value={group.name}
+                    aria-label={S.name}
+                    onClick={(event) => event.stopPropagation()}
+                    onChange={(event) =>
+                      dispatch({
+                        type: "updateObjectGroup",
+                        name: group.name,
+                        patch: { name: event.target.value },
+                      })
+                    }
+                    className="h-5 min-w-0 flex-1 rounded border border-transparent bg-transparent px-0.5 outline-none hover:border-separator focus:border-[var(--brand-light)]"
+                  />
+                  <button
+                    type="button"
+                    aria-label="Objetos del grupo"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setExpanded(isExpanded ? null : group.name);
+                    }}
+                    className="shrink-0 text-[10px] text-text-secondary hover:text-foreground"
+                  >
+                    {group.objects.length} {isExpanded ? "▴" : "▾"}
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={S.delete}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      dispatch({ type: "deleteObjectGroup", name: group.name });
+                    }}
+                    className="shrink-0 text-text-secondary opacity-0 hover:text-destructive group-hover:opacity-100"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                {isExpanded ? (
+                  <div className="mb-1 ml-6 border-l border-separator pl-2">
+                    {scene.objects.map((object) => {
+                      const member = group.objects.includes(object.name);
+                      return (
+                        <button
+                          key={object.id}
+                          type="button"
+                          onClick={() =>
+                            dispatch({
+                              type: "updateObjectGroup",
+                              name: group.name,
+                              patch: {
+                                objects: member
+                                  ? group.objects.filter((name) => name !== object.name)
+                                  : [...group.objects, object.name],
+                              },
+                            })
+                          }
+                          className={cn(
+                            "flex w-full items-center gap-1.5 rounded px-1 py-0.5 text-left text-[12px] hover:bg-list-hover",
+                            member ? "text-foreground" : "text-text-placeholder",
+                          )}
+                        >
+                          <span className="grid h-3.5 w-3.5 shrink-0 place-items-center rounded-[2px] border border-separator">
+                            {member ? <Check className="h-2.5 w-2.5 text-success" /> : null}
+                          </span>
+                          <span className="min-w-0 flex-1 truncate">{object.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
               </div>
-            ))
-          )}
-        </Section>
-      </div>
-    </aside>
+            );
+          })}
+        </div>
+      ) : null}
+    </div>
   );
 }
