@@ -22,6 +22,25 @@ import { cn } from "@/lib/utils";
 
 type SelectorTarget = { eventId: string; slot: "conditions" | "actions" } | null;
 
+/** Parameter text colors, taken from GDevelop's official theme.json
+ * (eventsSheet.instruction-parameter.*). */
+const PARAM_COLOR: Record<string, string> = {
+  object: "text-param-object",
+  textObject: "text-param-object",
+  number: "text-param-number",
+  expression: "text-param-number",
+  string: "text-param-base",
+  key: "text-param-base",
+  button: "text-param-base",
+  sound: "text-param-base",
+  layer: "text-param-base",
+  scene: "text-param-base",
+  operator: "text-param-operator",
+  modop: "text-param-operator",
+  varscene: "text-param-var",
+  yesno: "text-param-behavior",
+};
+
 function InstructionRow({
   ins,
   eventId,
@@ -37,7 +56,7 @@ function InstructionRow({
   const parts = sentenceParts(def);
 
   return (
-    <div className="group flex items-start gap-1 px-1.5 py-[3px] text-[12px] leading-snug hover:bg-elevated/60">
+    <div className="group flex items-start gap-1 px-1.5 py-[3px] text-[12px] leading-snug text-ev-row-text hover:bg-elevated/60">
       <span className="flex-1">
         {parts.map((p, idx) => {
           if (p.text !== undefined) return <span key={idx}>{p.text}</span>;
@@ -61,7 +80,9 @@ function InstructionRow({
               }
               className={cn(
                 "mx-0.5 rounded border border-transparent bg-elevated/70 px-1 text-[12px] outline-none focus:border-link",
-                isObject ? "text-warning-gd" : "text-link",
+                isObject
+                  ? "text-param-object"
+                  : (PARAM_COLOR[param.type] ?? "text-param-base"),
               )}
             />
           );
@@ -129,7 +150,7 @@ function EventNode({
         <div className="w-9 shrink-0 border-r border-separator bg-toolbar py-1 text-center text-[10px] tabular-nums text-muted-foreground">
           {index}
         </div>
-        <div className="min-w-0 flex-1 border-b border-separator">
+        <div className="min-w-0 flex-1 border-b border-ev-border">
           {isGroup ? (
             <div
               className="group flex items-center gap-2 px-2 py-1"
@@ -171,7 +192,7 @@ function EventNode({
             </div>
           ) : (
             <div className="group flex min-h-8">
-              <div className="w-1/2 border-r border-separator">
+              <div className="w-1/2 border-r border-ev-border bg-ev-conditions">
                 <div className="flex items-center gap-1 px-1.5 pt-1">
                   <button
                     type="button"
@@ -219,7 +240,7 @@ function EventNode({
                   <Plus className="h-3 w-3" /> Añadir condición
                 </button>
               </div>
-              <div className="w-1/2">
+              <div className="w-1/2 bg-ev-actions">
                 <div className="px-1.5 pt-1 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
                   Acciones
                 </div>

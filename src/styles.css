@@ -63,6 +63,20 @@
   --color-warning-gd: var(--warning-gd);
   --color-comment-green: var(--comment-green);
   --color-event-alt: var(--event-alt);
+  /* Events sheet (GDevelop eventsSheet tokens) */
+  --color-ev-conditions: var(--ev-conditions);
+  --color-ev-actions: var(--ev-actions);
+  --color-ev-border: var(--ev-border);
+  --color-ev-row: var(--ev-row);
+  --color-ev-row-text: var(--ev-row-text);
+  --color-ev-selected: var(--ev-selected);
+  --color-param-base: var(--param-base);
+  --color-param-number: var(--param-number);
+  --color-param-object: var(--param-object);
+  --color-param-behavior: var(--param-behavior);
+  --color-param-operator: var(--param-operator);
+  --color-param-var: var(--param-var);
+  --color-param-error: var(--param-error);
 }
 
 @theme {
@@ -105,6 +119,20 @@
   --warning-gd: oklch(0.8389 0.1393 74.86); /* #FFBC57 */
   --comment-green: oklch(0.55 0.1 155); /* comment events */
   --event-alt: oklch(0.29 0.016 285.2); /* slightly lighter than toolbar */
+  /* Events sheet — official GDevelop eventsSheet colors */
+  --ev-conditions: #25252E;
+  --ev-actions: #1D1D26;
+  --ev-border: #3E4452;
+  --ev-row: #282C34;
+  --ev-row-text: #D6DEEC;
+  --ev-selected: #4AB0E4;
+  --param-base: #0ECD7A;
+  --param-number: #E0D01F;
+  --param-object: #A483FF;
+  --param-behavior: #9AA5CE;
+  --param-operator: #FF85ED;
+  --param-var: #8AD6FF;
+  --param-error: #FE6C46;
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -153,6 +181,20 @@
   --warning-gd: oklch(0.8389 0.1393 74.86);
   --comment-green: oklch(0.55 0.1 155);
   --event-alt: oklch(0.29 0.016 285.2);
+  /* Events sheet — official GDevelop eventsSheet colors */
+  --ev-conditions: #25252E;
+  --ev-actions: #1D1D26;
+  --ev-border: #3E4452;
+  --ev-row: #282C34;
+  --ev-row-text: #D6DEEC;
+  --ev-selected: #4AB0E4;
+  --param-base: #0ECD7A;
+  --param-number: #E0D01F;
+  --param-object: #A483FF;
+  --param-behavior: #9AA5CE;
+  --param-operator: #FF85ED;
+  --param-var: #8AD6FF;
+  --param-error: #FE6C46;
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
