@@ -150,7 +150,7 @@ function EventNode({
         <div className="w-9 shrink-0 border-r border-separator bg-toolbar py-1 text-center text-[10px] tabular-nums text-muted-foreground">
           {index}
         </div>
-        <div className="min-w-0 flex-1 border-b border-separator">
+        <div className="min-w-0 flex-1 border-b border-ev-border">
           {isGroup ? (
             <div
               className="group flex items-center gap-2 px-2 py-1"
@@ -192,7 +192,7 @@ function EventNode({
             </div>
           ) : (
             <div className="group flex min-h-8">
-              <div className="w-1/2 border-r border-separator">
+              <div className="w-1/2 border-r border-ev-border bg-ev-conditions">
                 <div className="flex items-center gap-1 px-1.5 pt-1">
                   <button
                     type="button"
@@ -240,7 +240,7 @@ function EventNode({
                   <Plus className="h-3 w-3" /> Añadir condición
                 </button>
               </div>
-              <div className="w-1/2">
+              <div className="w-1/2 bg-ev-actions">
                 <div className="px-1.5 pt-1 text-[9px] font-semibold uppercase tracking-wide text-muted-foreground">
                   Acciones
                 </div>
