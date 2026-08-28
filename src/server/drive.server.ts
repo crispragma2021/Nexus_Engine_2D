@@ -22,7 +22,7 @@ async function driveFetch(
     connectionAPIKey,
     connectorId: DRIVE_CONNECTOR_ID,
     path,
-    init,
+    ...(init ? { init } : {}),
   });
   if (!res.ok) {
     const body = await res.text();
