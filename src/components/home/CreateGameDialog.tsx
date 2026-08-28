@@ -263,7 +263,7 @@ export function CreateGameDialog({ open, onOpenChange }: Props) {
             <div className="flex justify-end">
               <button
                 type="button"
-                onClick={openEditor}
+                onClick={goConfig}
                 aria-label="Generar juego"
                 className="rounded-md bg-[#32323B] p-2 text-muted-foreground active:bg-primary active:text-primary-foreground"
               >
@@ -284,7 +284,7 @@ export function CreateGameDialog({ open, onOpenChange }: Props) {
 
           <button
             type="button"
-            onClick={openEditor}
+            onClick={goConfig}
             className="mt-3 flex h-36 w-48 flex-col items-center justify-center gap-2 rounded-lg border border-separator text-foreground active:bg-elevated"
           >
             <Plus className="size-7" />
@@ -307,7 +307,7 @@ export function CreateGameDialog({ open, onOpenChange }: Props) {
               <button
                 key={t.id}
                 type="button"
-                onClick={openEditor}
+                onClick={goConfig}
                 className="text-left"
               >
                 <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
