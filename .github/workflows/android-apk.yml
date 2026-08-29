@@ -109,25 +109,27 @@ jobs:
           KS_PASS="${BUBBLEWRAP_KEYSTORE_PASSWORD:-defaultPassword123}"
           K_PASS="${BUBBLEWRAP_KEY_PASSWORD:-defaultPassword123}"
           
-          echo "Compilando APK con Gradle..."
+          # Localizar herramientas de Android SDK build-tools
+          BUILD_TOOLS_DIR=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -n 1)
+          export PATH="$BUILD_TOOLS_DIR:$PATH"
+
+          echo "Compilando con Gradle..."
           chmod +x ./gradlew
           ./gradlew assembleRelease bundleRelease --stacktrace
 
-          echo "Firmando APK y AAB..."
+          echo "Firmando APK..."
           UNSIGNED_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
-          SIGNED_APK="app-release-signed.apk"
-          
-          # Alinear y firmar APK con apksigner de Android SDK
-          zipalign -v -p 4 "$UNSIGNED_APK" /tmp/aligned.apk || cp "$UNSIGNED_APK" /tmp/aligned.apk
+          SIGNED_APK="$GITHUB_WORKSPACE/android/app-release-signed.apk"
+
+          zipalign -f -v -p 4 "$UNSIGNED_APK" /tmp/aligned.apk || cp "$UNSIGNED_APK" /tmp/aligned.apk
           apksigner sign --ks "$GITHUB_WORKSPACE/android/android.keystore"             --ks-pass "pass:$KS_PASS"             --key-pass "pass:$K_PASS"             --ks-key-alias "$ANDROID_KEY_ALIAS"             --out "$SIGNED_APK" /tmp/aligned.apk
-          
-          echo "Verificando firma..."
+
+          echo "Firma verificada:"
           apksigner verify --verbose "$SIGNED_APK"
-          
-          # Dejar artefactos listos para el paso de subida
-          mkdir -p ../dist-apk
-          cp "$SIGNED_APK" ../dist-apk/
-          find app/build/outputs/bundle/release -name "*.aab" -exec cp {} ../dist-apk/ \; 2>/dev/null || true
+
+          mkdir -p "$GITHUB_WORKSPACE/dist-apk"
+          cp "$SIGNED_APK" "$GITHUB_WORKSPACE/dist-apk/NexusEngine-v0.1.0.apk"
+          find app/build/outputs/bundle/release -name "*.aab" -exec cp {} "$GITHUB_WORKSPACE/dist-apk/NexusEngine-v0.1.0.aab" \; 2>/dev/null || true
       - name: Create Digital Asset Links file
         env:
           ANDROID_SHA256_CERT_FINGERPRINT: ${{ vars.ANDROID_SHA256_CERT_FINGERPRINT }}
