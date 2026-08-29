@@ -57,10 +57,10 @@ jobs:
             -dname "CN=NexusEngine, OU=Dev, O=Nexus, L=Asuncion, C=PY" \
             -deststoretype pkcs12
 
-      - name: Init Bubblewrap
+      - name: Init Bubblewrap (non-interactive)
         run: |
           cd android
-          bubblewrap init \
+          echo "N" | bubblewrap init \
             --manifest ../dist/manifest.json \
             --packageId com.nexusengine.app \
             --appName "Nexus Engine" \
