@@ -1,0 +1,474 @@
+From 84996d47194ddf600142493b11b0cab069860cbe Mon Sep 17 00:00:00 2001
+From: crispragma2021 <108682362+crispragma2021@users.noreply.github.com>
+Date: Sat, 29 Aug 2026 04:08:37 +0000
+Subject: [PATCH] ci(android): keystore de desarrollo automatico y busqueda
+ recursiva de APK con find
+
+Co-authored-by: arena-agent <297053741+arena-agent@users.noreply.github.com>
+---
+ .github/workflows/android-apk.yml | 162 ++++++++++++++++-----
+ handoff-ci-workflow.patch         | 225 ++++++++++++++++++++++++++++++
+ 2 files changed, 351 insertions(+), 36 deletions(-)
+ create mode 100644 handoff-ci-workflow.patch
+
+diff --git a/.github/workflows/android-apk.yml b/.github/workflows/android-apk.yml
+index 3b1d2f5..639fe36 100644
+--- a/.github/workflows/android-apk.yml
++++ b/.github/workflows/android-apk.yml
+@@ -12,6 +12,7 @@ permissions:
+ env:
+   PWA_URL: ${{ vars.NEXUS_ENGINE_PWA_URL || 'https://gdevelop-design-guru.vercel.app' }}
+   BUBBLEWRAP_VERSION: "1.25.0"
++  ANDROID_PACKAGE_ID: com.nexusengine.studio
+ 
+ jobs:
+   build:
+@@ -41,12 +42,13 @@ jobs:
+       - name: Build the web application
+         run: bun run build
+ 
++      # No Gradle cache here: Bubblewrap generates the Gradle project later in the
++      # job, so setup-java would fail looking for build files that do not exist yet.
+       - name: Set up Java
+-        uses: actions/setup-java@v4
++        uses: actions/setup-java@v5
+         with:
+           distribution: temurin
+           java-version: "17"
+-          cache: gradle
+ 
+       - name: Set up Android SDK
+         uses: android-actions/setup-android@v3
+@@ -54,17 +56,55 @@ jobs:
+       - name: Install Bubblewrap
+         run: npm install --global "@bubblewrap/cli@${BUBBLEWRAP_VERSION}"
+ 
+-      - name: Restore the Android signing key
++      # Release signing uses the repository secrets. When they are missing (forks,
++      # manual dry runs) we fall back to a throwaway development keystore so the
++      # pipeline still produces an installable, self-signed APK.
++      - name: Prepare the Android signing key
++        id: signing
+         env:
+           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
++          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.BUBBLEWRAP_KEYSTORE_PASSWORD }}
++          ANDROID_KEY_PASSWORD: ${{ secrets.BUBBLEWRAP_KEY_PASSWORD }}
++          ANDROID_KEY_ALIAS: ${{ vars.ANDROID_KEY_ALIAS || 'android' }}
+         run: |
+-          if [[ -z "$ANDROID_KEYSTORE_BASE64" ]]; then
+-            echo "::error::ANDROID_KEYSTORE_BASE64 is not configured."
+-            exit 1
+-          fi
++          set -euo pipefail
+           mkdir -p android
+-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/android.keystore
+-          chmod 600 android/android.keystore
++          keystore="$GITHUB_WORKSPACE/android/android.keystore"
++          alias="$ANDROID_KEY_ALIAS"
++
++          if [[ -n "${ANDROID_KEYSTORE_BASE64:-}" && -n "${ANDROID_KEYSTORE_PASSWORD:-}" && -n "${ANDROID_KEY_PASSWORD:-}" ]]; then
++            echo "Using the release keystore from repository secrets."
++            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
++            store_password="$ANDROID_KEYSTORE_PASSWORD"
++            key_password="$ANDROID_KEY_PASSWORD"
++            signing_mode=release
++          else
++            echo "::warning::Signing secrets are incomplete; generating a development keystore. This APK is NOT for the Play Store."
++            store_password="nexus-engine-dev"
++            key_password="nexus-engine-dev"
++            alias="androiddebugkey"
++            keytool -genkeypair \
++              -keystore "$keystore" \
++              -alias "$alias" \
++              -keyalg RSA \
++              -keysize 2048 \
++              -validity 10000 \
++              -storepass "$store_password" \
++              -keypass "$key_password" \
++              -dname "CN=Nexus Engine Dev, OU=CI, O=Nexus Engine, L=Asuncion, C=PY"
++            signing_mode=development
++          fi
++
++          chmod 600 "$keystore"
++          echo "::add-mask::$store_password"
++          echo "::add-mask::$key_password"
++          {
++            echo "keystore=$keystore"
++            echo "alias=$alias"
++            echo "mode=$signing_mode"
++            echo "store_password=$store_password"
++            echo "key_password=$key_password"
++          } >> "$GITHUB_OUTPUT"
+ 
+       - name: Wait for the tagged web deployment
+         run: |
+@@ -96,58 +136,108 @@ jobs:
+ 
+       - name: Build the signed APK and App Bundle
+         env:
+-          BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ secrets.BUBBLEWRAP_KEYSTORE_PASSWORD }}
+-          BUBBLEWRAP_KEY_PASSWORD: ${{ secrets.BUBBLEWRAP_KEY_PASSWORD }}
+-          ANDROID_KEY_ALIAS: ${{ vars.ANDROID_KEY_ALIAS || 'android' }}
++          BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ steps.signing.outputs.store_password }}
++          BUBBLEWRAP_KEY_PASSWORD: ${{ steps.signing.outputs.key_password }}
+         run: |
+-          if [[ -z "$BUBBLEWRAP_KEYSTORE_PASSWORD" || -z "$BUBBLEWRAP_KEY_PASSWORD" ]]; then
+-            echo "::error::BUBBLEWRAP_KEYSTORE_PASSWORD and BUBBLEWRAP_KEY_PASSWORD are required."
+-            exit 1
+-          fi
++          set -euo pipefail
+           bubblewrap build \
+             --manifest=android \
+             --skipPwaValidation \
+-            --signingKeyPath="$GITHUB_WORKSPACE/android/android.keystore" \
+-            --signingKeyAlias="$ANDROID_KEY_ALIAS"
++            --signingKeyPath="${{ steps.signing.outputs.keystore }}" \
++            --signingKeyAlias="${{ steps.signing.outputs.alias }}"
+ 
+-      - name: Create Digital Asset Links file
++      # Bubblewrap has moved its output paths between versions, so never assume a
++      # relative location: locate the artifacts recursively and export real paths.
++      - name: Collect the build artifacts
++        id: artifacts
++        run: |
++          set -euo pipefail
++          mkdir -p dist-android
++
++          find_artifact() {
++            find "$GITHUB_WORKSPACE/android" -type f -name "$1" \
++              -not -path "*/intermediates/*" \
++              -not -path "*/.gradle/*" \
++              -print0 2>/dev/null | xargs -0 -r ls -S 2>/dev/null | head -n 1
++          }
++
++          apk="$(find_artifact 'app-release-signed.apk')"
++          [[ -z "$apk" ]] && apk="$(find_artifact '*-release*.apk')" || true
++          [[ -z "$apk" ]] && apk="$(find_artifact '*.apk')" || true
++          aab="$(find_artifact 'app-release-bundle.aab')"
++          [[ -z "$aab" ]] && aab="$(find_artifact '*.aab')" || true
++
++          if [[ -z "$apk" ]]; then
++            echo "::error::No APK was produced by Bubblewrap."
++            find "$GITHUB_WORKSPACE/android" \( -name '*.apk' -o -name '*.aab' \) -print || true
++            exit 1
++          fi
++
++          version="${GITHUB_REF_NAME#refs/tags/}"
++          cp "$apk" "dist-android/Nexus-Engine-${version}-signed.apk"
++          echo "apk=dist-android/Nexus-Engine-${version}-signed.apk" >> "$GITHUB_OUTPUT"
++          if [[ -n "$aab" ]]; then
++            cp "$aab" "dist-android/Nexus-Engine-${version}.aab"
++            echo "aab=dist-android/Nexus-Engine-${version}.aab" >> "$GITHUB_OUTPUT"
++          fi
++
++          echo "Collected artifacts:"
++          ls -lh dist-android
++
++      - name: Verify the APK signature
++        run: |
++          set -euo pipefail
++          apksigner="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
++          if [[ -z "$apksigner" ]]; then
++            echo "::warning::apksigner was not found; skipping signature verification."
++            exit 0
++          fi
++          "$apksigner" verify --print-certs "${{ steps.artifacts.outputs.apk }}"
++
++      - name: Create the Digital Asset Links file
+         env:
+           ANDROID_SHA256_CERT_FINGERPRINT: ${{ vars.ANDROID_SHA256_CERT_FINGERPRINT }}
+-          BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ secrets.BUBBLEWRAP_KEYSTORE_PASSWORD }}
+-          ANDROID_KEY_ALIAS: ${{ vars.ANDROID_KEY_ALIAS || 'android' }}
++          KEYSTORE_PASSWORD: ${{ steps.signing.outputs.store_password }}
+         run: |
+-          fingerprint="$ANDROID_SHA256_CERT_FINGERPRINT"
++          set -euo pipefail
++          fingerprint="${ANDROID_SHA256_CERT_FINGERPRINT:-}"
+           if [[ -z "$fingerprint" ]]; then
+             fingerprint="$(keytool -list -v \
+-              -keystore android/android.keystore \
+-              -alias "$ANDROID_KEY_ALIAS" \
+-              -storepass "$BUBBLEWRAP_KEYSTORE_PASSWORD" |
+-              awk -F': ' '/SHA256:/{print $2; exit}')"
++              -keystore "${{ steps.signing.outputs.keystore }}" \
++              -alias "${{ steps.signing.outputs.alias }}" \
++              -storepass "$KEYSTORE_PASSWORD" |
++              awk -F'SHA256: ' '/SHA256:/{print $2; exit}')"
+           fi
+           if [[ -z "$fingerprint" ]]; then
+             echo "::error::Could not determine the Android SHA-256 certificate fingerprint."
+             exit 1
+           fi
+-          mkdir -p assetlinks/.well-known
+-          printf '[{"relation":["delegate_permission/common.handle_all_urls"],"target":{"namespace":"android_app","package_name":"com.nexusengine.studio","sha256_cert_fingerprints":["%s"]}}]' "$fingerprint" > assetlinks/.well-known/assetlinks.json
++          node scripts/assetlinks.mjs "$fingerprint" dist-android/assetlinks.json
++          cat dist-android/assetlinks.json
+ 
+       - name: Upload Android artifacts
+         uses: actions/upload-artifact@v4
+         with:
+           name: nexus-engine-android-${{ github.ref_name }}
+           if-no-files-found: error
+-          path: |
+-            android/app-release-signed.apk
+-            android/app-release-bundle.aab
+-            assetlinks/.well-known/assetlinks.json
++          path: dist-android/*
+ 
+       - name: Publish the GitHub release for a tag
+-        if: startsWith(github.ref, 'refs/tags/v')
++        if: startsWith(github.ref, 'refs/tags/v') && steps.signing.outputs.mode == 'release'
+         env:
+           GH_TOKEN: ${{ github.token }}
+         run: |
+-          gh release create "$GITHUB_REF_NAME" \
+-            android/app-release-signed.apk#Nexus-Engine-${GITHUB_REF_NAME}-signed.apk \
+-            android/app-release-bundle.aab#Nexus-Engine-${GITHUB_REF_NAME}.aab \
++          gh release create "$GITHUB_REF_NAME" dist-android/* \
+             --repo "$GITHUB_REPOSITORY" \
+             --generate-notes
++
++      - name: Summarize the build
++        if: always()
++        run: |
++          {
++            echo "### Nexus Engine Android build"
++            echo ""
++            echo "- Signing mode: \`${{ steps.signing.outputs.mode }}\`"
++            echo "- Package: \`$ANDROID_PACKAGE_ID\`"
++            echo "- PWA: $PWA_URL"
++          } >> "$GITHUB_STEP_SUMMARY"
+diff --git a/handoff-ci-workflow.patch b/handoff-ci-workflow.patch
+new file mode 100644
+index 0000000..c912f54
+--- /dev/null
++++ b/handoff-ci-workflow.patch
+@@ -0,0 +1,225 @@
++From aea7f3cfbaf99f60f66004e24cb46de5ccf364af Mon Sep 17 00:00:00 2001
++From: crispragma2021 <108682362+crispragma2021@users.noreply.github.com>
++Date: Sat, 29 Aug 2026 04:08:37 +0000
++Subject: [PATCH] ci(android): keystore de desarrollo automatico y busqueda
++ recursiva de APK con find
++
++Co-authored-by: arena-agent <297053741+arena-agent@users.noreply.github.com>
++---
++ .github/workflows/android-apk.yml | 157 +++++++++++++++++++++++-------
++ 1 file changed, 123 insertions(+), 34 deletions(-)
++
++diff --git a/.github/workflows/android-apk.yml b/.github/workflows/android-apk.yml
++index 3b1d2f5..c49e019 100644
++--- a/.github/workflows/android-apk.yml
+++++ b/.github/workflows/android-apk.yml
++@@ -12,6 +12,7 @@ permissions:
++ env:
++   PWA_URL: ${{ vars.NEXUS_ENGINE_PWA_URL || 'https://gdevelop-design-guru.vercel.app' }}
++   BUBBLEWRAP_VERSION: "1.25.0"
+++  ANDROID_PACKAGE_ID: com.nexusengine.studio
++ 
++ jobs:
++   build:
++@@ -54,17 +55,55 @@ jobs:
++       - name: Install Bubblewrap
++         run: npm install --global "@bubblewrap/cli@${BUBBLEWRAP_VERSION}"
++ 
++-      - name: Restore the Android signing key
+++      # Release signing uses the repository secrets. When they are missing (forks,
+++      # manual dry runs) we fall back to a throwaway development keystore so the
+++      # pipeline still produces an installable, self-signed APK.
+++      - name: Prepare the Android signing key
+++        id: signing
++         env:
++           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+++          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.BUBBLEWRAP_KEYSTORE_PASSWORD }}
+++          ANDROID_KEY_PASSWORD: ${{ secrets.BUBBLEWRAP_KEY_PASSWORD }}
+++          ANDROID_KEY_ALIAS: ${{ vars.ANDROID_KEY_ALIAS || 'android' }}
++         run: |
++-          if [[ -z "$ANDROID_KEYSTORE_BASE64" ]]; then
++-            echo "::error::ANDROID_KEYSTORE_BASE64 is not configured."
++-            exit 1
++-          fi
+++          set -euo pipefail
++           mkdir -p android
++-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/android.keystore
++-          chmod 600 android/android.keystore
+++          keystore="$GITHUB_WORKSPACE/android/android.keystore"
+++          alias="$ANDROID_KEY_ALIAS"
+++
+++          if [[ -n "${ANDROID_KEYSTORE_BASE64:-}" && -n "${ANDROID_KEYSTORE_PASSWORD:-}" && -n "${ANDROID_KEY_PASSWORD:-}" ]]; then
+++            echo "Using the release keystore from repository secrets."
+++            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore"
+++            store_password="$ANDROID_KEYSTORE_PASSWORD"
+++            key_password="$ANDROID_KEY_PASSWORD"
+++            signing_mode=release
+++          else
+++            echo "::warning::Signing secrets are incomplete; generating a development keystore. This APK is NOT for the Play Store."
+++            store_password="nexus-engine-dev"
+++            key_password="nexus-engine-dev"
+++            alias="androiddebugkey"
+++            keytool -genkeypair \
+++              -keystore "$keystore" \
+++              -alias "$alias" \
+++              -keyalg RSA \
+++              -keysize 2048 \
+++              -validity 10000 \
+++              -storepass "$store_password" \
+++              -keypass "$key_password" \
+++              -dname "CN=Nexus Engine Dev, OU=CI, O=Nexus Engine, L=Asuncion, C=PY"
+++            signing_mode=development
+++          fi
+++
+++          chmod 600 "$keystore"
+++          echo "::add-mask::$store_password"
+++          echo "::add-mask::$key_password"
+++          {
+++            echo "keystore=$keystore"
+++            echo "alias=$alias"
+++            echo "mode=$signing_mode"
+++            echo "store_password=$store_password"
+++            echo "key_password=$key_password"
+++          } >> "$GITHUB_OUTPUT"
++ 
++       - name: Wait for the tagged web deployment
++         run: |
++@@ -96,58 +135,108 @@ jobs:
++ 
++       - name: Build the signed APK and App Bundle
++         env:
++-          BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ secrets.BUBBLEWRAP_KEYSTORE_PASSWORD }}
++-          BUBBLEWRAP_KEY_PASSWORD: ${{ secrets.BUBBLEWRAP_KEY_PASSWORD }}
++-          ANDROID_KEY_ALIAS: ${{ vars.ANDROID_KEY_ALIAS || 'android' }}
+++          BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ steps.signing.outputs.store_password }}
+++          BUBBLEWRAP_KEY_PASSWORD: ${{ steps.signing.outputs.key_password }}
++         run: |
++-          if [[ -z "$BUBBLEWRAP_KEYSTORE_PASSWORD" || -z "$BUBBLEWRAP_KEY_PASSWORD" ]]; then
++-            echo "::error::BUBBLEWRAP_KEYSTORE_PASSWORD and BUBBLEWRAP_KEY_PASSWORD are required."
++-            exit 1
++-          fi
+++          set -euo pipefail
++           bubblewrap build \
++             --manifest=android \
++             --skipPwaValidation \
++-            --signingKeyPath="$GITHUB_WORKSPACE/android/android.keystore" \
++-            --signingKeyAlias="$ANDROID_KEY_ALIAS"
+++            --signingKeyPath="${{ steps.signing.outputs.keystore }}" \
+++            --signingKeyAlias="${{ steps.signing.outputs.alias }}"
++ 
++-      - name: Create Digital Asset Links file
+++      # Bubblewrap has moved its output paths between versions, so never assume a
+++      # relative location: locate the artifacts recursively and export real paths.
+++      - name: Collect the build artifacts
+++        id: artifacts
+++        run: |
+++          set -euo pipefail
+++          mkdir -p dist-android
+++
+++          find_artifact() {
+++            find "$GITHUB_WORKSPACE/android" -type f -name "$1" \
+++              -not -path "*/intermediates/*" \
+++              -not -path "*/.gradle/*" \
+++              -print0 2>/dev/null | xargs -0 -r ls -S 2>/dev/null | head -n 1
+++          }
+++
+++          apk="$(find_artifact 'app-release-signed.apk')"
+++          [[ -z "$apk" ]] && apk="$(find_artifact '*-release*.apk')" || true
+++          [[ -z "$apk" ]] && apk="$(find_artifact '*.apk')" || true
+++          aab="$(find_artifact 'app-release-bundle.aab')"
+++          [[ -z "$aab" ]] && aab="$(find_artifact '*.aab')" || true
+++
+++          if [[ -z "$apk" ]]; then
+++            echo "::error::No APK was produced by Bubblewrap."
+++            find "$GITHUB_WORKSPACE/android" \( -name '*.apk' -o -name '*.aab' \) -print || true
+++            exit 1
+++          fi
+++
+++          version="${GITHUB_REF_NAME#refs/tags/}"
+++          cp "$apk" "dist-android/Nexus-Engine-${version}-signed.apk"
+++          echo "apk=dist-android/Nexus-Engine-${version}-signed.apk" >> "$GITHUB_OUTPUT"
+++          if [[ -n "$aab" ]]; then
+++            cp "$aab" "dist-android/Nexus-Engine-${version}.aab"
+++            echo "aab=dist-android/Nexus-Engine-${version}.aab" >> "$GITHUB_OUTPUT"
+++          fi
+++
+++          echo "Collected artifacts:"
+++          ls -lh dist-android
+++
+++      - name: Verify the APK signature
+++        run: |
+++          set -euo pipefail
+++          apksigner="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+++          if [[ -z "$apksigner" ]]; then
+++            echo "::warning::apksigner was not found; skipping signature verification."
+++            exit 0
+++          fi
+++          "$apksigner" verify --print-certs "${{ steps.artifacts.outputs.apk }}"
+++
+++      - name: Create the Digital Asset Links file
++         env:
++           ANDROID_SHA256_CERT_FINGERPRINT: ${{ vars.ANDROID_SHA256_CERT_FINGERPRINT }}
++-          BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ secrets.BUBBLEWRAP_KEYSTORE_PASSWORD }}
++-          ANDROID_KEY_ALIAS: ${{ vars.ANDROID_KEY_ALIAS || 'android' }}
+++          KEYSTORE_PASSWORD: ${{ steps.signing.outputs.store_password }}
++         run: |
++-          fingerprint="$ANDROID_SHA256_CERT_FINGERPRINT"
+++          set -euo pipefail
+++          fingerprint="${ANDROID_SHA256_CERT_FINGERPRINT:-}"
++           if [[ -z "$fingerprint" ]]; then
++             fingerprint="$(keytool -list -v \
++-              -keystore android/android.keystore \
++-              -alias "$ANDROID_KEY_ALIAS" \
++-              -storepass "$BUBBLEWRAP_KEYSTORE_PASSWORD" |
++-              awk -F': ' '/SHA256:/{print $2; exit}')"
+++              -keystore "${{ steps.signing.outputs.keystore }}" \
+++              -alias "${{ steps.signing.outputs.alias }}" \
+++              -storepass "$KEYSTORE_PASSWORD" |
+++              awk -F'SHA256: ' '/SHA256:/{print $2; exit}')"
++           fi
++           if [[ -z "$fingerprint" ]]; then
++             echo "::error::Could not determine the Android SHA-256 certificate fingerprint."
++             exit 1
++           fi
++-          mkdir -p assetlinks/.well-known
++-          printf '[{"relation":["delegate_permission/common.handle_all_urls"],"target":{"namespace":"android_app","package_name":"com.nexusengine.studio","sha256_cert_fingerprints":["%s"]}}]' "$fingerprint" > assetlinks/.well-known/assetlinks.json
+++          node scripts/assetlinks.mjs "$fingerprint" dist-android/assetlinks.json
+++          cat dist-android/assetlinks.json
++ 
++       - name: Upload Android artifacts
++         uses: actions/upload-artifact@v4
++         with:
++           name: nexus-engine-android-${{ github.ref_name }}
++           if-no-files-found: error
++-          path: |
++-            android/app-release-signed.apk
++-            android/app-release-bundle.aab
++-            assetlinks/.well-known/assetlinks.json
+++          path: dist-android/*
++ 
++       - name: Publish the GitHub release for a tag
++-        if: startsWith(github.ref, 'refs/tags/v')
+++        if: startsWith(github.ref, 'refs/tags/v') && steps.signing.outputs.mode == 'release'
++         env:
++           GH_TOKEN: ${{ github.token }}
++         run: |
++-          gh release create "$GITHUB_REF_NAME" \
++-            android/app-release-signed.apk#Nexus-Engine-${GITHUB_REF_NAME}-signed.apk \
++-            android/app-release-bundle.aab#Nexus-Engine-${GITHUB_REF_NAME}.aab \
+++          gh release create "$GITHUB_REF_NAME" dist-android/* \
++             --repo "$GITHUB_REPOSITORY" \
++             --generate-notes
+++
+++      - name: Summarize the build
+++        if: always()
+++        run: |
+++          {
+++            echo "### Nexus Engine Android build"
+++            echo ""
+++            echo "- Signing mode: \`${{ steps.signing.outputs.mode }}\`"
+++            echo "- Package: \`$ANDROID_PACKAGE_ID\`"
+++            echo "- PWA: $PWA_URL"
+++          } >> "$GITHUB_STEP_SUMMARY"
++-- 
++2.39.5
++
+-- 
+2.39.5
+
