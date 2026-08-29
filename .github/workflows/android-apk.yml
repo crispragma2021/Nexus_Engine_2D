@@ -1,4 +1,4 @@
-name: Android APK (Trusted Web Activity)
+name: Build APK
 
 on:
   push:
@@ -11,187 +11,69 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      actions: read
-      checks: write
     steps:
-      - name: Check out the tagged source
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          fetch-depth: 0
+          node-version: 20
 
-      - name: Set up Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
+      - name: Install dependencies
+        run: npm install
 
-      - name: Install web dependencies
-        run: bun install --frozen-lockfile
+      - name: Build web
+        run: npm run build
 
-      - name: Generate optimized Nexus icons
-        run: bun run generate-icons || echo "No icons script found"
-
-      - name: Verify TypeScript
-        run: bun run type-check || echo "No type-check script found"
-
-      - name: Verify ESLint
-        run: bun run lint || echo "No lint script found"
-
-      - name: Build the web application
-        run: bun run build
-
-      - name: Set up Java
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Set up Android SDK
+      - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
       - name: Install Bubblewrap
-        run: npm install --global "@bubblewrap/cli@1.25.0"
+        run: npm install -g @bubblewrap/cli
 
-      - name: Restore or Generate Android signing key
-        run: |
-          mkdir -p "$GITHUB_WORKSPACE/android"
-          KEYSTORE_FILE="$GITHUB_WORKSPACE/android/android.keystore"
-          
-          if [[ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]]; then
-            echo "Restaurando keystore desde secrets..."
-            echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > "$KEYSTORE_FILE"
-          fi
-          
-          if [[ ! -s "$KEYSTORE_FILE" ]]; then
-            echo "🔑 Generando keystore de firma automático..."
-            keytool -genkeypair -v \
-              -keystore "$KEYSTORE_FILE" \
-              -alias "android" \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -storepass "nexusEngine2026" \
-              -keypass "nexusEngine2026" \
-              -dname "CN=NexusEngine, OU=Dev, O=Nexus, L=Asuncion, C=PY" \
-              -deststoretype pkcs12
-          fi
-          
-          echo "🔍 Verificando keystore..."
-          keytool -list -v -keystore "$KEYSTORE_FILE" -storepass "nexusEngine2026" || {
-            echo "❌ Keystore corrupto, regenerando..."
-            rm -f "$KEYSTORE_FILE"
-            keytool -genkeypair -v \
-              -keystore "$KEYSTORE_FILE" \
-              -alias "android" \
-              -keyalg RSA \
-              -keysize 2048 \
-              -validity 10000 \
-              -storepass "nexusEngine2026" \
-              -keypass "nexusEngine2026" \
-              -dname "CN=NexusEngine, OU=Dev, O=Nexus, L=Asuncion, C=PY" \
-              -deststoretype pkcs12
-          }
-          
-          echo "BUBBLEWRAP_KEYSTORE_PASSWORD=nexusEngine2026" >> $GITHUB_ENV
-          echo "BUBBLEWRAP_KEY_PASSWORD=nexusEngine2026" >> $GITHUB_ENV
-          echo "ANDROID_KEY_ALIAS=android" >> $GITHUB_ENV
-          
-          ls -lh "$KEYSTORE_FILE"
-
-      - name: Configure TWA manually (skip manifest check)
+      - name: Generate keystore
         run: |
           mkdir -p android
-          cd android
-          
-          # Crear bubblewrap.json manualmente
-          cat > bubblewrap.json << 'BWRAP'
-{
-  "applicationId": "com.nexusengine.studio",
-  "appName": "Nexus Engine",
-  "appVersion": "0.1.0",
-  "manifestUrl": "https://gdevelop-design-guru.vercel.app/manifest.json",
-  "android": {
-    "packageName": "com.nexusengine.studio",
-    "versionCode": 1,
-    "versionName": "0.1.0"
-  },
-  "web": {
-    "scope": "https://gdevelop-design-guru.vercel.app/"
-  },
-  "builtInBrowsers": "Chrome",
-  "fallbackToSystemBrowser": true,
-  "enableSiteSettingsShortcut": false,
-  "enableNotifications": true,
-  "enableFullscreen": false
-}
-BWRAP
-          
-          echo "✅ bubblewrap.json creado manualmente"
-          cat bubblewrap.json
+          keytool -genkeypair -v \
+            -keystore android/android.keystore \
+            -alias android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass nexusEngine2026 \
+            -keypass nexusEngine2026 \
+            -dname "CN=NexusEngine, OU=Dev, O=Nexus, L=Asuncion, C=PY" \
+            -deststoretype pkcs12
 
-      - name: Generate Android project with Bubblewrap
+      - name: Init Bubblewrap
         run: |
           cd android
-          echo "📦 Generando proyecto Android con Bubblewrap..."
-          bubblewrap update || {
-            echo "⚠️ Falló update. Generando proyecto manualmente..."
-            # Intentar generar con el comando build directamente
-            bubblewrap build || echo "⚠️ Falló build también"
-          }
-          
-          # Verificar que se crearon los archivos
-          echo "📂 Estructura generada:"
-          ls -la
-          ls -la app/ 2>/dev/null || echo "No app directory yet"
+          bubblewrap init --manifest ../dist/manifest.json
 
-      - name: Build APK with Gradle
+      - name: Build APK with Bubblewrap
         run: |
           cd android
-          chmod +x gradlew
-          echo "🔨 Compilando APK con Gradle..."
-          ./gradlew assembleRelease || {
-            echo "⚠️ Gradle assembleRelease falló. Intentando build completo..."
-            ./gradlew build || echo "⚠️ Build completo falló también"
-          }
-          
-          echo "🔍 Buscando APKs generadas..."
-          find . -name "*.apk" -type f 2>/dev/null || echo "No APKs found"
-          find . -name "*.aab" -type f 2>/dev/null || echo "No AABs found"
-          
-          # Si no hay APK, intentar con Bubblewrap
-          if [ ! -f "app/build/outputs/apk/release/app-release.apk" ]; then
-            echo "⚠️ No APK encontrada. Intentando con bubblewrap build..."
-            bubblewrap build \
-              --keystore ../android/android.keystore \
-              --keystorePassword "nexusEngine2026" \
-              --keyAlias "android" \
-              --keyPassword "nexusEngine2026" || echo "⚠️ Bubblewrap build falló"
-          fi
+          bubblewrap build \
+            --keystore android.keystore \
+            --keystorePassword nexusEngine2026 \
+            --keyAlias android \
+            --keyPassword nexusEngine2026
 
-      - name: Upload Android artifacts
-        if: always()
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: NexusEngine-v0.1.0
-          path: |
-            android/app/build/outputs/apk/release/*.apk
-            android/app/build/outputs/bundle/release/*.aab
-            app/build/outputs/apk/release/*.apk
-            app/build/outputs/bundle/release/*.aab
-            android/app/build/outputs/apk/**/*.apk
-            android/app/build/outputs/bundle/**/*.aab
-            android/app/build/outputs/**/*.apk
-            android/app/build/outputs/**/*.aab
+          name: app-release
+          path: android/app/build/outputs/apk/release/*.apk
 
-      - name: Publish the GitHub release for a tag
-        if: startsWith(github.ref, 'refs/tags/') && success()
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            android/app/build/outputs/apk/release/*.apk
-            android/app/build/outputs/bundle/release/*.aab
-            app/build/outputs/apk/release/*.apk
-            app/build/outputs/bundle/release/*.aab
-            android/app/build/outputs/**/*.apk
-            android/app/build/outputs/**/*.aab
+          files: android/app/build/outputs/apk/release/*.apk
           generate_release_notes: true
-          prerelease: false
