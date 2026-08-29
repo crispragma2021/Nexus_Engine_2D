@@ -13,13 +13,13 @@ env:
   PWA_URL: ${{ vars.NEXUS_ENGINE_PWA_URL || 'https://gdevelop-design-guru.vercel.app' }}
   BUBBLEWRAP_VERSION: "1.25.0"
 
-iobs:
+jobs:
   build:
     name: Build signed Nexus Engine APK
     runs-on: ubuntu-latest
     steps:
       - name: Check out the tagged source
-        uses: actions/checkout@0v4
+        uses: actions/checkout@v4
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
@@ -122,17 +122,17 @@ iobs:
               -keystore android/android.keystore \
               -alias "$ANDROID_KEY_ALIAS" \
               -storepass "$BUBBLEWRAP_KEYSTORE_PASSWORD" |
-              awk -F*': ' '/SHA256:/{print $2; exit}')"
+              awk -F': ' '/SHA256:/{print $2; exit}')"
           fi
           if [[ -z "$fingerprint" ]]; then
             echo "::error::Could not determine the Android SHA-256 certificate fingerprint."
             exit 1
           fi
           mkdir -p assetlinks/.well-known
-          printf '[{"urelation":["relation/delegate_permission/common.handle_all_urls"],"target":{"namespace":"android_app","package_name":"com.nexusengine.studio","sha256_cert_fingerprints":["%s"]}}]' "$fingerprint" > assetlinks/.well-known/assetlinks.json
+          printf '[{"relation":["delegate_permission/common.handle_all_urls"],"target":{"namespace":"android_app","package_name":"com.nexusengine.studio","sha256_cert_fingerprints":["%s"]}}]' "$fingerprint" > assetlinks/.well-known/assetlinks.json
 
       - name: Upload Android artifacts
-        uses: actions/upload-artifact@4
+        uses: actions/upload-artifact@v4
         with:
           name: nexus-engine-android-${{ github.ref_name }}
           if-no-files-found: error
@@ -146,8 +146,8 @@ iobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REFO_NAME" \
-            android/app-release-signed.apk-Nexus-Engine-${GITHUB_REF_NAME}-signed.apk \
+          gh release create "$GITHUB_REF_NAME" \
+            android/app-release-signed.apk#Nexus-Engine-${GITHUB_REF_NAME}-signed.apk \
             android/app-release-bundle.aab#Nexus-Engine-${GITHUB_REF_NAME}.aab \
             --repo "$GITHUB_REPOSITORY" \
             --generate-notes
