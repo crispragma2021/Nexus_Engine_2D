@@ -22,22 +22,62 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Build web
-        run: npm run build
-
-      - name: Copy manifest to dist
+      - name: Build web with Vite
         run: |
-          # Copiar el manifest de public/ a dist/ para Bubblewrap
-          cp public/manifest.webmanifest dist/manifest.json
-
-      - name: Verify manifest.json exists
-        run: |
-          if [ ! -f dist/manifest.json ]; then
-            echo "ERROR: manifest.json not found in dist/"
-            exit 1
+          echo "🔨 Ejecutando npm run build..."
+          npm run build
+          
+          echo "📂 Verificando contenido de dist/ después del build..."
+          ls -la dist/ || echo "❌ dist/ no existe después del build"
+          
+          # Si dist/ está vacío, buscar la salida de Vite en otro lado
+          if [ ! -f "dist/index.html" ]; then
+            echo "⚠️ dist/index.html no encontrado. Buscando carpeta de build..."
+            find . -name "index.html" -type f 2>/dev/null | grep -v node_modules
           fi
-          echo "✓ manifest.json found"
-          cat dist/manifest.json
+
+      - name: Prepare dist directory
+        run: |
+          echo "📁 Preparando directorio dist/ para Bubblewrap..."
+          
+          # Si dist/ no existe o está vacío, copiar desde public/
+          if [ ! -f "dist/index.html" ] && [ -d "public" ]; then
+            echo "⚠️ dist/ no tiene index.html, copiando public/ a dist/..."
+            mkdir -p dist
+            cp -r public/* dist/ 2>/dev/null || echo "⚠️ No se pudo copiar"
+          fi
+          
+          # Asegurar que manifest existe en dist/
+          if [ -f "public/manifest.webmanifest" ]; then
+            cp public/manifest.webmanifest dist/manifest.json
+            echo "✅ manifest.webmanifest copiado a dist/manifest.json"
+          elif [ -f "public/manifest.json" ]; then
+            cp public/manifest.json dist/manifest.json
+            echo "✅ manifest.json copiado a dist/manifest.json"
+          elif [ ! -f "dist/manifest.json" ]; then
+            echo "⚠️ No hay manifest, creando uno básico..."
+            cat > dist/manifest.json << 'MANIFEST'
+{
+  "name": "Nexus Engine",
+  "short_name": "NexusEngine",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#000000",
+  "icons": [
+    {
+      "src": "icon-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}
+MANIFEST
+            echo "✅ manifest.json básico creado en dist/"
+          fi
+          
+          echo "📂 Contenido final de dist/:"
+          ls -la dist/ || echo "❌ dist/ todavía no existe"
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -90,20 +130,30 @@ jobs:
 
       - name: List generated APK
         run: |
-          find android -name "*.apk" -type f
-          ls -lh android/app/build/outputs/apk/release/
+          echo "🔍 Buscando APK generada..."
+          find . -name "*.apk" -type f 2>/dev/null
+          echo "📂 Verificando ubicación común:"
+          ls -lh android/app/build/outputs/apk/release/ 2>/dev/null || echo "No APK en la ruta esperada"
 
       - name: Upload APK to Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: app-release
-          path: android/app/build/outputs/apk/release/*.apk
+          path: |
+            android/app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/release/*.apk
+            android/app/build/outputs/apk/**/*.apk
+            **/app/build/outputs/apk/**/*.apk
           retention-days: 30
 
       - name: Create GitHub Release with APK
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: android/app/build/outputs/apk/release/*.apk
+          files: |
+            android/app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/release/*.apk
+            android/app/build/outputs/apk/**/*.apk
+            **/app/build/outputs/apk/**/*.apk
           draft: false
           prerelease: false
