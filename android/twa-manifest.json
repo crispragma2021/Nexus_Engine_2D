@@ -1,0 +1,53 @@
+{
+  "packageId": "com.nexusengine.studio",
+  "host": "gdevelop-design-guru.vercel.app",
+  "name": "Nexus Engine",
+  "launcherName": "Nexus",
+  "display": "standalone",
+  "themeColor": "#7046EC",
+  "themeColorDark": "#7046EC",
+  "navigationColor": "#1D1D26",
+  "navigationColorDark": "#1D1D26",
+  "navigationDividerColor": "#1D1D26",
+  "navigationDividerColorDark": "#1D1D26",
+  "backgroundColor": "#1D1D26",
+  "enableNotifications": true,
+  "startUrl": "/",
+  "iconUrl": "https://gdevelop-design-guru.vercel.app/icons/nexus-512.png",
+  "maskableIconUrl": "https://gdevelop-design-guru.vercel.app/icons/nexus-512.png",
+  "monochromeIconUrl": "https://gdevelop-design-guru.vercel.app/icons/nexus-mark.svg",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "./android.keystore",
+    "alias": "android"
+  },
+  "appVersionName": "0.1.0",
+  "appVersionCode": 1,
+  "shortcuts": [
+    {
+      "name": "Abrir el editor",
+      "shortName": "Editor",
+      "url": "https://gdevelop-design-guru.vercel.app/editor",
+      "chosenIconUrl": "https://gdevelop-design-guru.vercel.app/icons/nexus-192.png"
+    }
+  ],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://gdevelop-design-guru.vercel.app/manifest.webmanifest",
+  "fallbackType": "customtabs",
+  "features": {},
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://gdevelop-design-guru.vercel.app/",
+  "minSdkVersion": 23,
+  "orientation": "any",
+  "fingerprints": [],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "appVersion": "0.1.0"
+}

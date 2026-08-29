@@ -7,13 +7,11 @@ export interface LocalProject {
   id: string;
   name: string;
   updatedAt: string;
-  driveFileId?: string;
   project: GDProject;
 }
 
 export interface CurrentProjectRef {
   id: string | null;
-  driveFileId?: string;
   project: GDProject;
 }
 
@@ -37,16 +35,13 @@ function write(key: string, value: unknown): void {
 }
 
 export function listLocalProjects(): LocalProject[] {
-  return read<LocalProject[]>(LIST_KEY, []).sort((a, b) =>
-    b.updatedAt.localeCompare(a.updatedAt),
-  );
+  return read<LocalProject[]>(LIST_KEY, []).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
 
 export function saveLocalProject(input: {
   id?: string | null;
   name: string;
   project: GDProject;
-  driveFileId?: string;
 }): LocalProject {
   const all = read<LocalProject[]>(LIST_KEY, []);
   const id = input.id ?? `loc_${Date.now().toString(36)}`;
@@ -54,7 +49,6 @@ export function saveLocalProject(input: {
     id,
     name: input.name,
     updatedAt: new Date().toISOString(),
-    ...(input.driveFileId ? { driveFileId: input.driveFileId } : {}),
     project: input.project,
   };
   const next = [entry, ...all.filter((p) => p.id !== id)];

@@ -1773,7 +1773,7 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
     };
   });
 
-  // Load the project picked from the home screen (Drive or device) after hydration.
+  // Load the project picked from the home screen after hydration.
   React.useEffect(() => {
     const current = getCurrentProject();
     if (current?.project) {

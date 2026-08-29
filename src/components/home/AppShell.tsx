@@ -1,6 +1,16 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Bell, Crown, GraduationCap, Hammer, Home, Languages, Menu, Gamepad2, Store } from "lucide-react";
+import {
+  Bell,
+  Crown,
+  GraduationCap,
+  Hammer,
+  Home,
+  Languages,
+  Menu,
+  Gamepad2,
+  Store,
+} from "lucide-react";
 import { MainMenuDrawer } from "./MainMenuDrawer";
 import { CreateGameDialog } from "./CreateGameDialog";
 import { ProfileDialog } from "./ProfileDialog";
@@ -9,6 +19,7 @@ import { CreateView } from "./CreateView";
 import { LearnView } from "./LearnView";
 import { PlayView } from "./PlayView";
 import { StoreView } from "./StoreView";
+import { NexusLogo, NexusMark } from "@/components/brand/NexusLogo";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
 
@@ -43,7 +54,6 @@ export function AppShell() {
     setProfileOpen(false);
   };
 
-
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-window">
       <header className="shrink-0 border-b border-separator bg-window">
@@ -59,14 +69,15 @@ export function AppShell() {
           <button
             type="button"
             onClick={() => setTab("create")}
-            aria-label="Inicio"
+            aria-label="Inicio de Nexus Engine"
             className={cn(
-              "rounded-t-lg border-x border-t px-3 py-2 text-foreground",
+              "rounded-t-lg border-x border-t px-2 py-1.5 text-foreground",
               tab === "create" ? "border-separator bg-elevated" : "border-transparent",
             )}
           >
-            <Home className="size-6" />
+            <NexusMark className="size-7" />
           </button>
+          <NexusLogo className="hidden min-w-0 text-base font-bold text-foreground sm:inline-flex" />
           {email ? (
             <button
               type="button"
@@ -88,7 +99,6 @@ export function AppShell() {
               Iniciar sesión
             </button>
           )}
-
         </div>
 
         <div className="flex h-12 items-center gap-3 border-t border-separator bg-toolbar px-3">

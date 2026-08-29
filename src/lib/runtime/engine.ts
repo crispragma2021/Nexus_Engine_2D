@@ -51,7 +51,11 @@ export class GameRuntime {
   private readonly mouse = new Set<string>();
   private pointer = { x: 0, y: 0 };
 
-  constructor(scene: GDRuntimeScene, options: RuntimeOptions = {}, project: GDProject | null = null) {
+  constructor(
+    scene: GDRuntimeScene,
+    options: RuntimeOptions = {},
+    project: GDProject | null = null,
+  ) {
     this.options = options;
     this.project = project;
     this.scene = scene;
@@ -61,11 +65,7 @@ export class GameRuntime {
   }
 
   /** Convenience for the preview: run one scene of a whole project. */
-  static forProject(
-    project: GDProject,
-    scene: GDScene,
-    options: RuntimeOptions = {},
-  ): GameRuntime {
+  static forProject(project: GDProject, scene: GDScene, options: RuntimeOptions = {}): GameRuntime {
     return new GameRuntime(toRuntimeSceneFromProject(project, scene), options, project);
   }
 
@@ -162,7 +162,8 @@ export class GameRuntime {
     for (const behavior of behaviors) {
       behaviorTypes[behavior.name] = behavior.type;
       behaviorProps[behavior.name] = behavior.properties;
-      if (behavior.type === "PlatformBehavior::PlatformerObjectBehavior") platformer = behavior.properties;
+      if (behavior.type === "PlatformBehavior::PlatformerObjectBehavior")
+        platformer = behavior.properties;
     }
     const healthBehavior = behaviors.find((b) => b.type === "Health::Health");
     const flashBehavior = behaviors.find((b) => b.type === "Flash::Flash");
@@ -368,7 +369,8 @@ export class GameRuntime {
       const out: RTObject[] = [];
       for (const member of members) {
         for (const object of this.state.objects) {
-          if (object.name === member && !object.destroyed && !out.includes(object)) out.push(object);
+          if (object.name === member && !object.destroyed && !out.includes(object))
+            out.push(object);
         }
       }
       return out;
@@ -516,7 +518,10 @@ export class GameRuntime {
       case "KeyNotPressed":
         return !this.keys.has(normalizeKey(p["key"] ?? ""));
       case "KeyReleased":
-        return this.keysReleased.has(normalizeKey(p["key"] ?? "")) || this.keysPressedOnce.has(normalizeKey(p["key"] ?? ""));
+        return (
+          this.keysReleased.has(normalizeKey(p["key"] ?? "")) ||
+          this.keysPressedOnce.has(normalizeKey(p["key"] ?? ""))
+        );
       case "SourisBouton":
         return this.mouse.has(p["button"] ?? "Left");
       case "SourisSurObjet": {
@@ -527,13 +532,21 @@ export class GameRuntime {
         return list.length > 0;
       }
       case "Collision": {
-        const [hitA, hitB] = this.collisions(p["object"] ?? "", p["object2"] ?? "", p["ignoreTouchingEdges"] === "yes");
+        const [hitA, hitB] = this.collisions(
+          p["object"] ?? "",
+          p["object2"] ?? "",
+          p["ignoreTouchingEdges"] === "yes",
+        );
         picked[p["object"] ?? ""] = hitA;
         picked[p["object2"] ?? ""] = hitB;
         return hitA.length > 0;
       }
       case "Separation": {
-        const [hitA, hitB] = this.collisions(p["object"] ?? "", p["object2"] ?? "", p["ignoreTouchingEdges"] === "yes");
+        const [hitA, hitB] = this.collisions(
+          p["object"] ?? "",
+          p["object2"] ?? "",
+          p["ignoreTouchingEdges"] === "yes",
+        );
         const colliding = new Set(hitA);
         const list = this.pickList(picked, p["object"] ?? "").filter((o) => !colliding.has(o));
         picked[p["object"] ?? ""] = list;
@@ -551,7 +564,9 @@ export class GameRuntime {
         return list.length > 0;
       }
       case "PlatformBehavior::IsFalling": {
-        const list = this.pickList(picked, p["object"] ?? "").filter((o) => o.falling && !o.onFloor);
+        const list = this.pickList(picked, p["object"] ?? "").filter(
+          (o) => o.falling && !o.onFloor,
+        );
         picked[p["object"] ?? ""] = list;
         return list.length > 0;
       }
@@ -867,7 +882,11 @@ export class GameRuntime {
         const list = this.targetsOf(picked, p["object"] ?? p["instance"] ?? "");
         for (const object of list) {
           object.variables[name] = String(
-            applyModOp(asNumber(object.variables[name] ?? 0), p["op"] ?? "set to", evalNumber(p["value"] ?? "0", ctx)),
+            applyModOp(
+              asNumber(object.variables[name] ?? 0),
+              p["op"] ?? "set to",
+              evalNumber(p["value"] ?? "0", ctx),
+            ),
           );
         }
         break;
@@ -876,7 +895,11 @@ export class GameRuntime {
         const name = p["variable"] ?? "";
         for (const object of targets()) {
           object.variables[name] = String(
-            applyModOp(asNumber(object.variables[name] ?? 0), p["op"] ?? "set to", evalNumber(p["value"] ?? "0", ctx)),
+            applyModOp(
+              asNumber(object.variables[name] ?? 0),
+              p["op"] ?? "set to",
+              evalNumber(p["value"] ?? "0", ctx),
+            ),
           );
         }
         break;
@@ -903,7 +926,11 @@ export class GameRuntime {
       case "SetCameraZoom": {
         const layer = this.state.layers[p["layer"] ?? this.baseLayerName()];
         const zoom = clamp(
-          applyModOp(layer?.cameraZoom ?? 1, p["operator"] ?? "set to", evalNumber(p["factor"] ?? "1", ctx)),
+          applyModOp(
+            layer?.cameraZoom ?? 1,
+            p["operator"] ?? "set to",
+            evalNumber(p["factor"] ?? "1", ctx),
+          ),
           0.1,
           8,
         );
@@ -937,7 +964,11 @@ export class GameRuntime {
       case "SetTimeScale":
         this.state.timeScale = Math.max(
           0,
-          applyModOp(this.state.timeScale, p["op"] ?? "set to", evalNumber(p["timeScale"] ?? "1", ctx)),
+          applyModOp(
+            this.state.timeScale,
+            p["op"] ?? "set to",
+            evalNumber(p["timeScale"] ?? "1", ctx),
+          ),
         );
         break;
       case "PauseGame":
@@ -1035,7 +1066,10 @@ export class GameRuntime {
         break;
       case "Health::AddHealth":
         for (const object of targets()) {
-          object.health = Math.min(object.maxHealth, object.health + evalNumber(p["health"] ?? "1", ctx));
+          object.health = Math.min(
+            object.maxHealth,
+            object.health + evalNumber(p["health"] ?? "1", ctx),
+          );
         }
         break;
       case "Health::SetHealth":
@@ -1132,7 +1166,8 @@ export class GameRuntime {
       const def = this.scene.objects.find((o) => o.name === object.name);
       const animation = def?.animations?.[object.animationIndex];
       if (!animation || animation.images.length <= 1) continue;
-      const stepMs = Math.max(0, animation.timeBetweenFrames) / Math.max(0.05, object.animationSpeedScale);
+      const stepMs =
+        Math.max(0, animation.timeBetweenFrames) / Math.max(0.05, object.animationSpeedScale);
       object.frameTimer += delta * 1000;
       if (stepMs === 0) {
         // "as fast as possible": advance one frame per engine frame.
@@ -1299,7 +1334,9 @@ function toRuntimeSceneFromProject(project: GDProject, scene: GDScene): GDRuntim
     name: scene.name,
     backgroundColor: scene.backgroundColor,
     windowWidth:
-      scene.useCustomWindowSize && scene.customWindowWidth ? scene.customWindowWidth : project.gameSettings.windowWidth,
+      scene.useCustomWindowSize && scene.customWindowWidth
+        ? scene.customWindowWidth
+        : project.gameSettings.windowWidth,
     windowHeight:
       scene.useCustomWindowSize && scene.customWindowHeight
         ? scene.customWindowHeight
@@ -1340,7 +1377,9 @@ function overlaps(a: RTObject, b: RTObject, pad: number): boolean {
 }
 
 function pointInObject(object: RTObject, x: number, y: number): boolean {
-  return x >= object.x && x <= object.x + object.width && y >= object.y && y <= object.y + object.height;
+  return (
+    x >= object.x && x <= object.x + object.width && y >= object.y && y <= object.y + object.height
+  );
 }
 
 export function compare(left: number, operator: string, right: number): boolean {
@@ -1421,8 +1460,7 @@ function ease(kind: string, t: number): number {
 const rgbToHex = (r: number, g: number, b: number) =>
   `#${[r, g, b].map((v) => clamp(Math.round(v), 0, 255).toString(16).padStart(2, "0")).join("")}`;
 
-const nowMs = () =>
-  typeof performance !== "undefined" ? performance.now() : Date.now();
+const nowMs = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
 
 const KEY_ALIASES: Record<string, string> = {
   arrowleft: "Left",

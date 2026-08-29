@@ -1,5 +1,17 @@
 import * as React from "react";
-import { Github, Youtube, HelpCircle, Tag, ExternalLink, ChevronRight, ChevronDown, Crown, Coins, Trophy, Lock } from "lucide-react";
+import {
+  Github,
+  Youtube,
+  HelpCircle,
+  Tag,
+  ExternalLink,
+  ChevronRight,
+  ChevronDown,
+  Crown,
+  Coins,
+  Trophy,
+  Lock,
+} from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 interface Props {
@@ -22,7 +34,6 @@ const SOCIALS = [
     text: "Suscríbete e introduce tu nombre de usuario de YouTube aquí para obtener 50 créditos gratuitos.",
   },
 ];
-
 
 const ACHIEVEMENTS = [
   {
@@ -72,7 +83,10 @@ export function ProfileDialog({ open, onOpenChange, onSignOut }: Props) {
         </DialogTitle>
 
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 pb-5">
-          <div className="size-16 rounded-full bg-gradient-to-br from-[#7046EC] to-[#FF8569]" aria-hidden />
+          <div
+            className="size-16 rounded-full bg-gradient-to-br from-[#7046EC] to-[#FF8569]"
+            aria-hidden
+          />
           <h3 className="text-xl font-bold text-foreground">creador</h3>
 
           <div>
@@ -107,7 +121,9 @@ export function ProfileDialog({ open, onOpenChange, onSignOut }: Props) {
             <p className="text-base text-muted-foreground">
               Publicar en Android, iOS, desbloquear más proyectos en la nube, tablas de
               clasificación, funciones de colaboración y más servicios en línea.{" "}
-              <a href="#" className="text-link underline">Aprende más</a>
+              <a href="#" className="text-link underline">
+                Aprende más
+              </a>
             </p>
             <div className="flex items-center gap-4 rounded-xl border-2 border-[#45D9A1] bg-elevated p-4">
               <Crown className="size-8 shrink-0 text-[#FFBC57]" />
@@ -129,7 +145,10 @@ export function ProfileDialog({ open, onOpenChange, onSignOut }: Props) {
             <h4 className="text-xl font-bold text-foreground">Créditos</h4>
             <p className="text-base text-muted-foreground">
               Consigue ventajas y beneficios en la nube cuando te acerques al lanzamiento de tu
-              juego. <a href="#" className="text-link underline">Más información</a>
+              juego.{" "}
+              <a href="#" className="text-link underline">
+                Más información
+              </a>
             </p>
             <div className="space-y-3 rounded-xl bg-primary p-4">
               <p className="flex items-center gap-3 text-base font-medium text-primary-foreground">

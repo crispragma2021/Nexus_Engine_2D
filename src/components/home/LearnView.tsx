@@ -20,14 +20,17 @@ export function LearnView() {
           </button>
         </div>
         <p className="mt-3 text-base text-foreground/90">
-          Inicia en la industria en auge de los juegos casuales. Mejora tus habilidades y conviértete
-          en un profesional.
+          Inicia en la industria en auge de los juegos casuales. Mejora tus habilidades y
+          conviértete en un profesional.
         </p>
       </section>
 
       <div className="grid gap-4 p-4 sm:grid-cols-2">
         {COURSES.map((c) => (
-          <article key={c.id} className="overflow-hidden rounded-xl border border-separator bg-toolbar">
+          <article
+            key={c.id}
+            className="overflow-hidden rounded-xl border border-separator bg-toolbar"
+          >
             <div
               className={`flex h-40 items-center justify-center bg-gradient-to-br ${c.gradient}`}
               aria-hidden
