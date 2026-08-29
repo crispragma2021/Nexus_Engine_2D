@@ -114,7 +114,7 @@ jobs:
             exit 1
           fi
           bubblewrap build \
-            --manifest=android \
+            --manifest=android/twa-manifest.json \
             --skipPwaValidation \
             --signingKeyPath="$GITHUB_WORKSPACE/android/android.keystore" \
             --signingKeyAlias="$ANDROID_KEY_ALIAS"
