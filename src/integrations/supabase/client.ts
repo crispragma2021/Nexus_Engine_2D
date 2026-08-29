@@ -1,6 +1,11 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./types";
 
+type SupabaseClient = ReturnType<typeof createClient<Database>>;
+
+const OFFLINE_AUTH_MESSAGE =
+  "La autenticación remota no está configurada. Tus proyectos locales seguirán disponibles en este dispositivo.";
+
 function isNewSupabaseApiKey(value: string): boolean {
   return value.startsWith("sb_publishable_") || value.startsWith("sb_secret_");
 }
@@ -28,7 +33,24 @@ function createSupabaseFetch(supabaseKey: string): typeof fetch {
   };
 }
 
-function createSupabaseClient() {
+function createOfflineSupabaseClient(): SupabaseClient {
+  const unavailable = () => new Error(OFFLINE_AUTH_MESSAGE);
+
+  return {
+    auth: {
+      getSession: async () => ({ data: { session: null }, error: null }),
+      onAuthStateChange: () => ({
+        data: { subscription: { unsubscribe: () => undefined } },
+      }),
+      signOut: async () => ({ error: null }),
+      signUp: async () => ({ data: { user: null, session: null }, error: unavailable() }),
+      signInWithPassword: async () => ({ data: { user: null, session: null }, error: unavailable() }),
+      signInWithOAuth: async () => ({ data: { provider: "google", url: null }, error: unavailable() }),
+    },
+  } as unknown as SupabaseClient;
+}
+
+function createSupabaseClient(): SupabaseClient {
   // Use import.meta.env for client-side (Vite build-time replacement) and
   // fall back to process.env for server-side rendering.
   const supabaseUrl = import.meta.env["VITE_SUPABASE_URL"] || process.env["SUPABASE_URL"];
@@ -36,13 +58,8 @@ function createSupabaseClient() {
     import.meta.env["VITE_SUPABASE_PUBLISHABLE_KEY"] || process.env["SUPABASE_PUBLISHABLE_KEY"];
 
   if (!supabaseUrl || !supabaseKey) {
-    const missing = [
-      ...(!supabaseUrl ? ["SUPABASE_URL"] : []),
-      ...(!supabaseKey ? ["SUPABASE_PUBLISHABLE_KEY"] : []),
-    ];
-    const message = `Faltan variables de entorno de Supabase: ${missing.join(", ")}.`;
-    console.error(`[Supabase] ${message}`);
-    throw new Error(message);
+    console.warn("[Supabase] Credenciales no configuradas; se utilizará el modo local.");
+    return createOfflineSupabaseClient();
   }
 
   return createClient<Database>(supabaseUrl, supabaseKey, {
@@ -54,9 +71,9 @@ function createSupabaseClient() {
   });
 }
 
-let client: ReturnType<typeof createSupabaseClient> | undefined;
+let client: SupabaseClient | undefined;
 
-export const supabase = new Proxy({} as ReturnType<typeof createSupabaseClient>, {
+export const supabase = new Proxy({} as SupabaseClient, {
   get(_, property, receiver) {
     client ??= createSupabaseClient();
     return Reflect.get(client, property, receiver);
