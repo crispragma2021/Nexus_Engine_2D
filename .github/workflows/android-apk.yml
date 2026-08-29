@@ -109,8 +109,25 @@ jobs:
           KS_PASS="${BUBBLEWRAP_KEYSTORE_PASSWORD:-defaultPassword123}"
           K_PASS="${BUBBLEWRAP_KEY_PASSWORD:-defaultPassword123}"
           
-          # Enviar ambas contraseñas por stdin para evitar bloqueo TTY
-          printf "%s\n%s\n" "$KS_PASS" "$K_PASS" | bubblewrap build --skipPwaValidation
+          echo "Compilando APK con Gradle..."
+          chmod +x ./gradlew
+          ./gradlew assembleRelease bundleRelease --stacktrace
+
+          echo "Firmando APK y AAB..."
+          UNSIGNED_APK=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          SIGNED_APK="app-release-signed.apk"
+          
+          # Alinear y firmar APK con apksigner de Android SDK
+          zipalign -v -p 4 "$UNSIGNED_APK" /tmp/aligned.apk || cp "$UNSIGNED_APK" /tmp/aligned.apk
+          apksigner sign --ks "$GITHUB_WORKSPACE/android/android.keystore"             --ks-pass "pass:$KS_PASS"             --key-pass "pass:$K_PASS"             --ks-key-alias "$ANDROID_KEY_ALIAS"             --out "$SIGNED_APK" /tmp/aligned.apk
+          
+          echo "Verificando firma..."
+          apksigner verify --verbose "$SIGNED_APK"
+          
+          # Dejar artefactos listos para el paso de subida
+          mkdir -p ../dist-apk
+          cp "$SIGNED_APK" ../dist-apk/
+          find app/build/outputs/bundle/release -name "*.aab" -exec cp {} ../dist-apk/ \; 2>/dev/null || true
       - name: Create Digital Asset Links file
         env:
           ANDROID_SHA256_CERT_FINGERPRINT: ${{ vars.ANDROID_SHA256_CERT_FINGERPRINT }}
