@@ -40,8 +40,10 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Bubblewrap
-        run: npm install -g @bubblewrap/cli
+      - name: Install Bubblewrap and expect
+        run: |
+          npm install -g @bubblewrap/cli
+          sudo apt-get update && sudo apt-get install -y expect
 
       - name: Generate keystore
         run: |
@@ -79,14 +81,16 @@ jobs:
           BWRAP
           echo "✅ bubblewrap.json creado"
 
-      - name: Build APK (non-interactive)
+      - name: Build APK with expect
         run: |
           cd android
-          echo "n" | bubblewrap build \
-            --keystore android.keystore \
-            --keystorePassword nexusEngine2026 \
-            --keyAlias android \
-            --keyPassword nexusEngine2026
+          expect << 'EXPECT_SCRIPT'
+          set timeout 30
+          spawn bubblewrap build --keystore android.keystore --keystorePassword nexusEngine2026 --keyAlias android --keyPassword nexusEngine2026
+          expect "Do you want Bubblewrap to install the JDK (recommended)?"
+          send "n\r"
+          expect eof
+          EXPECT_SCRIPT
 
       - name: List generated APK
         run: |
