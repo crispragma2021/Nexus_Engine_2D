@@ -86,6 +86,16 @@ jobs:
           VERSION_NAME: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('0.1.0-dev.{0}', github.run_number) }}
         run: node scripts/configure-twa.mjs android/twa-manifest.json "$PWA_URL" "$VERSION_NAME"
 
+      - name: Preconfigure Bubblewrap CLI paths
+        run: |
+          mkdir -p ~/.bubblewrap
+          cat << BWC_EOF > ~/.bubblewrap/config.json
+          {
+            "jdkPath": "${{ env.JAVA_HOME }}",
+            "androidSdkPath": "${{ env.ANDROID_HOME }}"
+          }
+          BWC_EOF
+
       - name: Generate the Android project
         run: >-
           bubblewrap update
