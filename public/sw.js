@@ -5,6 +5,10 @@ const APP_SHELL = [
   "/icons/nexus-mark.svg",
   "/icons/nexus-192.png",
   "/icons/nexus-512.png",
+  "/icons/nexus-192-maskable.png",
+  "/icons/nexus-512-maskable.png",
+  "/icons/nexus-192-monochrome.png",
+  "/icons/nexus-512-monochrome.png",
 ];
 
 self.addEventListener("install", (event) => {
