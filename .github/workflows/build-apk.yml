@@ -74,29 +74,34 @@ jobs:
             },
             "web": {
               "scope": "https://nexus-engine-h1vc07j1n-crispragmatico2021s-projects.vercel.app/"
-            },
-            "builtInBrowsers": "Chrome",
-            "fallbackToSystemBrowser": true,
-            "enableSiteSettingsShortcut": false,
-            "enableNotifications": true,
-            "enableFullscreen": false,
-            "displayMode": "standalone",
-            "orientation": "portrait-primary"
+            }
           }
           BWRAP
           echo "✅ bubblewrap.json creado"
 
-      - name: Build APK
+      - name: Build APK (non-interactive)
         run: |
           cd android
-          bubblewrap build \
+          echo "n" | bubblewrap build \
             --keystore android.keystore \
             --keystorePassword nexusEngine2026 \
             --keyAlias android \
             --keyPassword nexusEngine2026
 
+      - name: List generated APK
+        run: |
+          echo "🔍 Buscando APK generada..."
+          find android -name "*.apk" -type f 2>/dev/null || echo "No APK found"
+          find . -name "*.apk" -type f 2>/dev/null || echo "No APK found in root"
+
       - name: Upload APK
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: app-release
-          path: android/app/build/outputs/apk/release/*.apk
+          path: |
+            android/app/build/outputs/apk/release/*.apk
+            app/build/outputs/apk/release/*.apk
+            **/app/build/outputs/apk/**/*.apk
+            **/*.apk
+          retention-days: 30
