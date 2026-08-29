@@ -60,7 +60,7 @@ jobs:
       - name: Init Bubblewrap (non-interactive)
         run: |
           cd android
-          echo "N" | bubblewrap init \
+          printf "n\n" | bubblewrap init \
             --manifest ../dist/manifest.json \
             --packageId com.nexusengine.app \
             --appName "Nexus Engine" \
