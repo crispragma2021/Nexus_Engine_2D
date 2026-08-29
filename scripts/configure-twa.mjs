@@ -27,11 +27,13 @@ manifest.startUrl = `${basePath || ""}/`;
 manifest.fullScopeUrl = publicUrl("/");
 manifest.webManifestUrl = publicUrl("/manifest.webmanifest");
 manifest.iconUrl = publicUrl("/icons/nexus-512.png");
-manifest.maskableIconUrl = publicUrl("/icons/nexus-512.png");
-manifest.monochromeIconUrl = publicUrl("/icons/nexus-192.png");
+manifest.maskableIconUrl = publicUrl("/icons/nexus-512-maskable.png");
+manifest.monochromeIconUrl = publicUrl("/icons/nexus-512-monochrome.png");
 manifest.appVersionName = cleanVersion;
 manifest.appVersion = cleanVersion;
 manifest.appVersionCode = appVersionCode;
+manifest.packageId =
+  process.env.ANDROID_PACKAGE_ID || manifest.packageId || "com.nexusengine.studio";
 manifest.shortcuts = [
   {
     name: "Abrir el editor",

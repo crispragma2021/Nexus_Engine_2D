@@ -14,15 +14,15 @@
   "enableNotifications": true,
   "startUrl": "/",
   "iconUrl": "https://gdevelop-design-guru.vercel.app/icons/nexus-512.png",
-  "maskableIconUrl": "https://gdevelop-design-guru.vercel.app/icons/nexus-512.png",
-  "monochromeIconUrl": "https://gdevelop-design-guru.vercel.app/icons/nexus-mark.svg",
+  "maskableIconUrl": "https://gdevelop-design-guru.vercel.app/icons/nexus-512-maskable.png",
+  "monochromeIconUrl": "https://gdevelop-design-guru.vercel.app/icons/nexus-512-monochrome.png",
   "splashScreenFadeOutDuration": 300,
   "signingKey": {
     "path": "./android.keystore",
     "alias": "android"
   },
   "appVersionName": "0.1.0",
-  "appVersionCode": 1,
+  "appVersionCode": 1000,
   "shortcuts": [
     {
       "name": "Abrir el editor",
