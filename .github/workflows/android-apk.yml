@@ -1,5 +1,4 @@
 name: Build APK
-
 on:
   push:
     tags:
@@ -11,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+
     steps:
       - uses: actions/checkout@v4
 
@@ -25,6 +25,15 @@ jobs:
       - name: Build web
         run: npm run build
 
+      - name: Verify manifest.json exists
+        run: |
+          if [ ! -f dist/manifest.json ]; then
+            echo "ERROR: manifest.json not found in dist/"
+            exit 1
+          fi
+          echo "✓ manifest.json found"
+          cat dist/manifest.json
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -34,12 +43,14 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Bubblewrap
+      - name: Install Bubblewrap CLI
         run: npm install -g @bubblewrap/cli
+
+      - name: Create Android directory
+        run: mkdir -p android
 
       - name: Generate keystore
         run: |
-          mkdir -p android
           keytool -genkeypair -v \
             -keystore android/android.keystore \
             -alias android \
@@ -54,7 +65,14 @@ jobs:
       - name: Init Bubblewrap
         run: |
           cd android
-          bubblewrap init --manifest ../dist/manifest.json
+          bubblewrap init \
+            --manifest ../dist/manifest.json \
+            --packageId com.nexusengine.app \
+            --appName "Nexus Engine" \
+            --appVersion 1.0.0 \
+            --appVersionCode 1 \
+            --minSdkVersion 21 \
+            --orientation portrait-primary
 
       - name: Build APK with Bubblewrap
         run: |
@@ -65,15 +83,22 @@ jobs:
             --keyAlias android \
             --keyPassword nexusEngine2026
 
-      - name: Upload APK
+      - name: List generated APK
+        run: |
+          find android -name "*.apk" -type f
+          ls -lh android/app/build/outputs/apk/release/
+
+      - name: Upload APK to Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: app-release
           path: android/app/build/outputs/apk/release/*.apk
+          retention-days: 30
 
-      - name: Create Release
+      - name: Create GitHub Release with APK
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v1
         with:
           files: android/app/build/outputs/apk/release/*.apk
-          generate_release_notes: true
+          draft: false
+          prerelease: false
