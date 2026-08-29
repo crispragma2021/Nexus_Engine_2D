@@ -25,6 +25,11 @@ jobs:
       - name: Build web
         run: npm run build
 
+      - name: Copy manifest to dist
+        run: |
+          # Copiar el manifest de public/ a dist/ para Bubblewrap
+          cp public/manifest.webmanifest dist/manifest.json
+
       - name: Verify manifest.json exists
         run: |
           if [ ! -f dist/manifest.json ]; then
