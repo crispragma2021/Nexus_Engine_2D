@@ -1,0 +1,82 @@
+name: Build APK
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web
+        run: npm run build
+
+      - name: Copy manifest
+        run: |
+          mkdir -p dist
+          cp public/manifest.webmanifest dist/manifest.json 2>/dev/null || echo "No manifest found"
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Bubblewrap
+        run: npm install -g @bubblewrap/cli
+
+      - name: Generate keystore
+        run: |
+          mkdir -p android
+          keytool -genkeypair -v \
+            -keystore android/android.keystore \
+            -alias android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass nexusEngine2026 \
+            -keypass nexusEngine2026 \
+            -dname "CN=NexusEngine, OU=Dev, O=Nexus, L=Asuncion, C=PY" \
+            -deststoretype pkcs12
+
+      - name: Init Bubblewrap
+        run: |
+          cd android
+          bubblewrap init \
+            --manifest ../dist/manifest.json \
+            --packageId com.nexusengine.app \
+            --appName "Nexus Engine" \
+            --appVersion 1.0.0
+
+      - name: Build APK
+        run: |
+          cd android
+          bubblewrap build \
+            --keystore android.keystore \
+            --keystorePassword nexusEngine2026 \
+            --keyAlias android \
+            --keyPassword nexusEngine2026
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: android/app/build/outputs/apk/release/*.apk
