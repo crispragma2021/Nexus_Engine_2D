@@ -57,12 +57,16 @@ jobs:
             -dname "CN=NexusEngine, OU=Dev, O=Nexus, L=Asuncion, C=PY" \
             -deststoretype pkcs12
 
-      - name: Init Bubblewrap (with Python)
+      - name: Init Bubblewrap (full non-interactive)
         run: |
           cd android
           python3 << 'PYTHON_SCRIPT'
           import subprocess
           import sys
+          import os
+          
+          # Obtener la ruta del JDK del entorno
+          java_home = os.environ.get('JAVA_HOME', '/opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.20-1/x64')
           
           cmd = [
               'bubblewrap', 'init',
@@ -73,7 +77,7 @@ jobs:
           ]
           
           try:
-              # Enviar 'n' (No) como respuesta a la pregunta del JDK
+              # Enviar respuestas: No al JDK, luego la ruta del JDK
               process = subprocess.Popen(
                   cmd,
                   stdin=subprocess.PIPE,
@@ -81,7 +85,10 @@ jobs:
                   stderr=subprocess.PIPE,
                   text=True
               )
-              stdout, stderr = process.communicate(input='n\n')
+              
+              # Primera pregunta: ¿Instalar JDK? -> No
+              # Segunda pregunta: Ruta del JDK -> JAVA_HOME
+              stdout, stderr = process.communicate(input=f'n\n{java_home}\n')
               
               print(stdout)
               if stderr:
