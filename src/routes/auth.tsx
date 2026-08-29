@@ -1,7 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { lovable } from "@/integrations/lovable";
 
 export const Route = createFileRoute("/auth")({
   ssr: false,
@@ -10,8 +9,7 @@ export const Route = createFileRoute("/auth")({
       { title: "Iniciar sesión · Nexus Engine" },
       {
         name: "description",
-        content:
-          "Inicia sesión para acceder a tus proyectos y a las herramientas de agente (MCP) del estudio.",
+        content: "Inicia sesión para acceder a tus proyectos y a las herramientas del estudio.",
       },
       { property: "og:title", content: "Iniciar sesión · Nexus Engine" },
       {
@@ -23,7 +21,7 @@ export const Route = createFileRoute("/auth")({
     ],
   }),
   validateSearch: (s: Record<string, unknown>) => ({
-    next: typeof s['next'] === 'string' ? (s['next'] as string) : '',
+    next: typeof s["next"] === "string" ? (s["next"] as string) : "",
   }),
   component: AuthPage,
 });
@@ -73,12 +71,14 @@ function AuthPage() {
 
   async function onGoogle() {
     setError(null);
-    const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: `${window.location.origin}/auth${next ? `?next=${encodeURIComponent(safeNext(next))}` : ""}`,
+    const { data, error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth${next ? `?next=${encodeURIComponent(safeNext(next))}` : ""}`,
+      },
     });
-    if (result.error) return setError(result.error.message ?? "No se pudo iniciar sesión con Google.");
-    if (result.redirected) return;
-    window.location.replace(safeNext(next));
+    if (error) return setError(error.message);
+    if (data.url) window.location.assign(data.url);
   }
 
   return (
@@ -88,7 +88,7 @@ function AuthPage() {
           {mode === "signin" ? "Iniciar sesión" : "Crear cuenta"}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Necesario para tus proyectos y para conectar asistentes de IA (MCP).
+          Necesario para guardar y recuperar tus proyectos en este dispositivo.
         </p>
 
         <button
@@ -100,7 +100,8 @@ function AuthPage() {
         </button>
 
         <div className="my-4 flex items-center gap-3 text-xs text-muted-foreground">
-          <span className="h-px flex-1 bg-separator" /> o <span className="h-px flex-1 bg-separator" />
+          <span className="h-px flex-1 bg-separator" /> o{" "}
+          <span className="h-px flex-1 bg-separator" />
         </div>
 
         <form onSubmit={onSubmit} className="space-y-3">

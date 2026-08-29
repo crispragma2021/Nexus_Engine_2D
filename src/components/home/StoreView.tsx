@@ -10,7 +10,11 @@ type FilterKey = "kind" | "view" | "objectType";
 
 const GROUPS: Array<{ key: FilterKey; title: string; options: string[] }> = [
   { key: "kind", title: "Tipo de paquete", options: ["Gratuito", "Premium", "Propio"] },
-  { key: "view", title: "Área de visualización", options: ["Arriba-abajo", "Vista lateral", "Isométrico"] },
+  {
+    key: "view",
+    title: "Área de visualización",
+    options: ["Arriba-abajo", "Vista lateral", "Isométrico"],
+  },
   {
     key: "objectType",
     title: "Tipo de objetos",

@@ -89,8 +89,10 @@ export function renderScene(
       ctx.fillStyle = object.textColor;
       ctx.font = `${object.bold ? "700 " : ""}${Math.max(1, object.textSize * zoom)}px ${object.fontFamily ? `"${object.fontFamily.replace(/\.[a-z]+$/i, "")}", ` : ""}ui-sans-serif, system-ui, sans-serif`;
       ctx.textBaseline = "middle";
-      ctx.textAlign = object.alignment === "center" ? "center" : object.alignment === "right" ? "right" : "left";
-      const anchorX = object.alignment === "center" ? 0 : object.alignment === "right" ? viewW / 2 : -viewW / 2;
+      ctx.textAlign =
+        object.alignment === "center" ? "center" : object.alignment === "right" ? "right" : "left";
+      const anchorX =
+        object.alignment === "center" ? 0 : object.alignment === "right" ? viewW / 2 : -viewW / 2;
       ctx.fillText(object.text, anchorX, 0);
       ctx.restore();
       continue;

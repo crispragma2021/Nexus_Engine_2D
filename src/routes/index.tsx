@@ -4,17 +4,17 @@ import { AppShell } from "@/components/home/AppShell";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Nexus Engine — Aprende, crea y publica juegos 2D" },
+      { title: "Nexus Engine — 2D/3D Game Engine" },
       {
         name: "description",
         content:
-          "Inicio del estudio de juegos: cursos, creación de proyectos, catálogo de juegos y tienda de assets, con el editor de escenas y eventos incluido.",
+          "Nexus Engine es un 2D/3D Game Engine con editor visual de escenas, eventos y runtime propio.",
       },
-      { property: "og:title", content: "Nexus Engine — Aprende, crea y publica juegos 2D" },
+      { property: "og:title", content: "Nexus Engine — 2D/3D Game Engine" },
       {
         property: "og:description",
         content:
-          "Crea juegos sin programar: plantillas, tienda de recursos y editor visual de escenas y eventos.",
+          "Crea juegos 2D y 3D con escenas, eventos visuales y un runtime preparado para crecer.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

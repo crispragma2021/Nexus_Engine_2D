@@ -3,6 +3,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Coins, Plus, RefreshCw, SendHorizonal, X } from "lucide-react";
 import { TEMPLATES } from "@/lib/home/data";
 import { ProjectsSection } from "./ProjectsSection";
+import { NexusMark } from "@/components/brand/NexusLogo";
 
 interface Props {
   onCreateGame: () => void;
@@ -18,7 +19,7 @@ export function CreateView({ onCreateGame }: Props) {
       {askOpen && (
         <section className="rounded-lg border border-[#FF8569]/60 bg-toolbar p-3">
           <div className="mb-2 flex items-center gap-2">
-            <span className="size-7 rounded-md bg-gradient-to-br from-[#7046EC] to-[#FF8569]" aria-hidden />
+            <NexusMark className="size-7 rounded-md" />
             <h2 className="flex-1 text-lg font-bold text-foreground">¿Qué te gustaría crear?</h2>
             <button
               type="button"
@@ -69,7 +70,6 @@ export function CreateView({ onCreateGame }: Props) {
       </section>
 
       <ProjectsSection />
-
 
       <div className="mt-7 flex items-center justify-between gap-3">
         <h2 className="flex items-center gap-3 text-2xl font-bold text-foreground">

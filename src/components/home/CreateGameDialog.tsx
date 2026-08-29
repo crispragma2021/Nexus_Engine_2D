@@ -32,12 +32,13 @@ function randomName() {
 
 type ResolutionId = "portrait" | "landscape" | "fullhd" | "custom";
 
-const RESOLUTIONS: Array<{ id: ResolutionId; label: string; sub?: string; w: number; h: number }> = [
-  { id: "portrait", label: "Retrato móvil", sub: "720x1280", w: 720, h: 1280 },
-  { id: "landscape", label: "Paisaje de escritorio y móvil", sub: "1280x720", w: 1280, h: 720 },
-  { id: "fullhd", label: "Escritorio Full HD", sub: "1920x1080", w: 1920, h: 1080 },
-  { id: "custom", label: "Personalizar tamaño", w: 800, h: 600 },
-];
+const RESOLUTIONS: Array<{ id: ResolutionId; label: string; sub?: string; w: number; h: number }> =
+  [
+    { id: "portrait", label: "Retrato móvil", sub: "720x1280", w: 720, h: 1280 },
+    { id: "landscape", label: "Paisaje de escritorio y móvil", sub: "1280x720", w: 1280, h: 720 },
+    { id: "fullhd", label: "Escritorio Full HD", sub: "1920x1080", w: 1920, h: 1080 },
+    { id: "custom", label: "Personalizar tamaño", w: 800, h: 600 },
+  ];
 
 const STORAGE_OPTIONS = ["Nube de Gdevelop", "No guardes este proyecto ahora"];
 
@@ -228,9 +229,7 @@ export function CreateGameDialog({ open, onOpenChange }: Props) {
                         storage === opt ? "border-[#0B62D6]" : "border-[#1D1D26]",
                       )}
                     >
-                      {storage === opt && (
-                        <Check className="size-3.5 stroke-[3] text-[#0B62D6]" />
-                      )}
+                      {storage === opt && <Check className="size-3.5 stroke-[3] text-[#0B62D6]" />}
                     </span>
                   </button>
                 ))}
@@ -248,7 +247,6 @@ export function CreateGameDialog({ open, onOpenChange }: Props) {
         <DialogTitle className="px-5 pb-3 pt-5 text-2xl font-bold text-foreground">
           Crear un nuevo juego
         </DialogTitle>
-
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-4">
           <div className="rounded-lg border border-[#FF8569]/60 bg-elevated p-3">
@@ -273,7 +271,9 @@ export function CreateGameDialog({ open, onOpenChange }: Props) {
           </div>
 
           <div className="mt-6 flex items-center justify-between gap-3">
-            <h3 className="text-lg font-bold text-foreground">Continúa con la inteligencia humana</h3>
+            <h3 className="text-lg font-bold text-foreground">
+              Continúa con la inteligencia humana
+            </h3>
             <button
               type="button"
               className="flex shrink-0 items-center gap-2 rounded-md border border-separator px-3 py-2 text-sm font-semibold text-foreground"
@@ -304,12 +304,7 @@ export function CreateGameDialog({ open, onOpenChange }: Props) {
 
           <div className="mt-4 grid grid-cols-2 gap-4">
             {list.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                onClick={goConfig}
-                className="text-left"
-              >
+              <button key={t.id} type="button" onClick={goConfig} className="text-left">
                 <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
                   <Coins className="size-4 text-[#FFBC57]" />
                   {t.credits}

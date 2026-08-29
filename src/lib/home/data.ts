@@ -72,7 +72,12 @@ export const COURSES: Course[] = [
 
 export const TEMPLATES: Template[] = [
   { id: "t1", title: "FPS 3D Multiplayer", credits: 1000, gradient: "from-[#232336] to-[#4F28CD]" },
-  { id: "t2", title: "Action Platformer Pixel", credits: 800, gradient: "from-[#3B1D5E] to-[#FF8569]" },
+  {
+    id: "t2",
+    title: "Action Platformer Pixel",
+    credits: 800,
+    gradient: "from-[#3B1D5E] to-[#FF8569]",
+  },
   { id: "t3", title: "2D Laner Racer", credits: 750, gradient: "from-[#12303F] to-[#6BAFFF]" },
   { id: "t4", title: "Cards Ranks", credits: 750, gradient: "from-[#2B1436] to-[#C9B6FC]" },
   { id: "t5", title: "Top-down Shooter", credits: 700, gradient: "from-[#1C2B1C] to-[#45D9A1]" },

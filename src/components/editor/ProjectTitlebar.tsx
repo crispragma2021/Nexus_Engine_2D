@@ -10,6 +10,7 @@ import { BRAND } from "@/lib/editor/brand";
 import { saveProjectEverywhere } from "@/lib/projects/save";
 import { cn } from "@/lib/utils";
 import { GdMenu, type MenuEntry } from "./gd/kit";
+import { NexusMark } from "@/components/brand/NexusLogo";
 
 export function ProjectTitlebar() {
   const { ui, dispatch, project, activeSceneName, dirty } = useEditor();
@@ -20,9 +21,7 @@ export function ProjectTitlebar() {
     setSaving(true);
     try {
       const result = await saveProjectEverywhere(project);
-      if (result.drive) window.alert?.("Guardado en el dispositivo y en Google Drive");
-      else if (result.driveError) window.alert?.(`Guardado local. Drive: ${result.driveError}`);
-      else window.alert?.("Guardado en este dispositivo");
+      if (result.local) window.alert?.("Guardado en este dispositivo");
     } catch {
       /* keep the editor usable if storage is unavailable */
     } finally {
@@ -105,11 +104,7 @@ export function ProjectTitlebar() {
               title={tab.label}
             >
               <GripVertical className="ml-0.5 h-3 w-3 shrink-0 opacity-30" />
-              {tab.kind === "home" ? (
-                <span className="grid h-4 w-4 place-items-center rounded-sm bg-[#25252E] text-[9px] font-black text-[#c9b6fc]">
-                  N
-                </span>
-              ) : null}
+              {tab.kind === "home" ? <NexusMark className="h-4 w-4 rounded-sm" /> : null}
               <span className="max-w-40 truncate px-1 py-1.5">{tab.label}</span>
               {tab.kind !== "home" || project.scenes.length > 1 ? (
                 <button

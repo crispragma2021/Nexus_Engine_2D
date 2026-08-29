@@ -16,6 +16,11 @@ dist-ssr
 .nitro
 *.local
 
+# Variables de entorno y secretos locales.
+.env
+.env.*
+!.env.example
+
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars
@@ -30,3 +35,13 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Bubblewrap generates the Android project and signing material in CI.
+android/.gradle/
+android/build/
+android/app/
+android/gradle/
+android/gradlew
+android/gradlew.bat
+android/gradle.properties
+android/android.keystore
