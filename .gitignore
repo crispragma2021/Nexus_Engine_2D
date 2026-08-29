@@ -45,3 +45,5 @@ android/gradlew
 android/gradlew.bat
 android/gradle.properties
 android/android.keystore
+.vercel
+.env*
