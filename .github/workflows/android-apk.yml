@@ -104,19 +104,13 @@ jobs:
           --skipVersionUpgrade
 
       - name: Build the signed APK and App Bundle
+        working-directory: android
         run: |
-          if [[ -z "$BUBBLEWRAP_KEYSTORE_PASSWORD" || -z "$BUBBLEWRAP_KEY_PASSWORD" ]]; then
-            echo "::error::BUBBLEWRAP_KEYSTORE_PASSWORD and BUBBLEWRAP_KEY_PASSWORD are required."
-            exit 1
-          fi
-          cd android
-          echo "$BUBBLEWRAP_KEYSTORE_PASSWORD" > /tmp/ks_pass.txt
-          echo "$BUBBLEWRAP_KEY_PASSWORD" > /tmp/key_pass.txt
+          KS_PASS="${BUBBLEWRAP_KEYSTORE_PASSWORD:-defaultPassword123}"
+          K_PASS="${BUBBLEWRAP_KEY_PASSWORD:-defaultPassword123}"
           
-          # Inyectar contraseñas vía flags no interactivas para Bubblewrap
-          bubblewrap build             --manifest=twa-manifest.json             --skipPwaValidation             --signingKeyPath="$GITHUB_WORKSPACE/android/android.keystore"             --signingKeyAlias="$ANDROID_KEY_ALIAS"             --signingKeyPassword="$BUBBLEWRAP_KEYSTORE_PASSWORD"             --signingKeyAliasPassword="$BUBBLEWRAP_KEY_PASSWORD" ||           (cat /tmp/ks_pass.txt /tmp/key_pass.txt | bubblewrap build --manifest=twa-manifest.json --skipPwaValidation)
-          
-          rm -f /tmp/ks_pass.txt /tmp/key_pass.txt
+          # Enviar ambas contraseñas por stdin para evitar bloqueo TTY
+          printf "%s\n%s\n" "$KS_PASS" "$K_PASS" | bubblewrap build --skipPwaValidation
       - name: Create Digital Asset Links file
         env:
           ANDROID_SHA256_CERT_FINGERPRINT: ${{ vars.ANDROID_SHA256_CERT_FINGERPRINT }}
