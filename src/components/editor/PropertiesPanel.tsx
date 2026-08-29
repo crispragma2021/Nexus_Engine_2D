@@ -280,7 +280,7 @@ function InstanceProperties({
 /* -------------------------------------------------------------------- object */
 
 function ObjectProperties({ objectId }: { objectId: string }) {
-  const { scene, dispatch } = useEditor();
+  const { scene, dispatch, project } = useEditor();
   const object = scene.objects.find((o) => o.id === objectId);
   if (!object) return null;
   const objectLocation: VariableScopeLocation = { scope: "object", objectId };
@@ -311,7 +311,10 @@ function ObjectProperties({ objectId }: { objectId: string }) {
     <>
       <div className="flex items-center gap-2 px-3 py-2">
         {(() => {
-          const image = resolveAsset(object.animations?.[0]?.images?.[0]?.image ?? object.asset);
+          const image = resolveAsset(
+            object.animations?.[0]?.images?.[0]?.image ?? object.asset,
+            project.resources,
+          );
           return image ? (
             <img
               src={image}

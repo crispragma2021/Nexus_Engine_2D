@@ -58,6 +58,7 @@ function buildEditorState(
       name: def.name,
       type: def.type,
       ...(def.asset ? { asset: def.asset } : {}),
+      ...(animation?.images[0]?.hitBox ? { hitBox: animation.images[0].hitBox } : {}),
       x: instance.x,
       y: instance.y,
       width: instance.width,
@@ -296,7 +297,7 @@ export function SceneCanvas() {
       width: windowSize.width,
       height: windowSize.height,
       background: rgb(scene.backgroundColor),
-      resolve: resolveAsset,
+      resolve: (name) => resolveAsset(name, project.resources),
       scale: 1,
       offsetX: 0,
       offsetY: 0,
@@ -388,6 +389,7 @@ export function SceneCanvas() {
     drag,
     editorView,
     project.gameSettings.renderOutsideGameArea,
+    project.resources,
     toWorld,
   ]);
 
@@ -447,6 +449,13 @@ export function SceneCanvas() {
     const point = localPoint(event);
     const handle = handleAt(point);
     const world = toWorld(point);
+    dispatch({
+      type: "ui",
+      patch: {
+        cursorClientPosition: { x: event.clientX, y: event.clientY },
+        cursorPosition: { x: Math.round(world.x), y: Math.round(world.y) },
+      },
+    });
 
     if (handle && ui.selectedInstanceIds.length === 1) {
       const id = ui.selectedInstanceIds[0]!;
@@ -507,6 +516,7 @@ export function SceneCanvas() {
     dispatch({
       type: "ui",
       patch: {
+        cursorClientPosition: { x: event.clientX, y: event.clientY },
         cursorPosition: { x: Math.round(toWorld(point).x), y: Math.round(toWorld(point).y) },
       },
     });

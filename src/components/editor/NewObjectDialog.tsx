@@ -207,7 +207,10 @@ export function NewObjectDialog() {
               <div className="mt-3 flex h-24 items-center justify-center rounded border border-separator bg-[#101017]">
                 {isSpriteLike(selected.typeId) && project.resources[0] ? (
                   <img
-                    src={resolveAsset(project.resources[0].file) ?? project.resources[0].file}
+                    src={
+                      resolveAsset(project.resources[0].file, project.resources) ??
+                      project.resources[0].file
+                    }
                     alt=""
                     className="max-h-20 max-w-full object-contain [image-rendering:pixelated]"
                   />

@@ -25,6 +25,30 @@ export interface GDObjectPoint {
   y: number;
 }
 
+export interface GDHitBoxPoint {
+  /** Pixel coordinate in the source frame. */
+  x: number;
+  y: number;
+}
+
+/**
+ * Editable collision geometry stored on a regular sprite frame. Generated masks
+ * intentionally use the same project model and object editor as manual masks.
+ */
+export interface GDFrameHitBox {
+  kind: "rectangle" | "polygon";
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  /** Source frame dimensions used to scale this mask with the instance. */
+  referenceWidth?: number | undefined;
+  referenceHeight?: number | undefined;
+  vertices: GDHitBoxPoint[];
+  /** Helps the inspector explain where the initial suggestion came from. */
+  source?: "manual" | "detected" | undefined;
+}
+
 export interface GDAnimationFrameImage {
   /** resource name, e.g. "player.png" */
   image: string;
@@ -35,6 +59,8 @@ export interface GDAnimationFrameImage {
   centerX: number;
   centerY: number;
   opacity: number;
+  /** Optional custom collision shape, inspectable in ObjectEditorDialog. */
+  hitBox?: GDFrameHitBox | undefined;
 }
 
 export interface GDObjectAnimation {
@@ -195,14 +221,32 @@ export interface GDScene {
   groups: GDObjectGroup[];
 }
 
+export interface GDResourceGenerationMetadata {
+  provider: "huggingface" | "cloudflare" | "procedural";
+  prompt?: string | undefined;
+  model?: string | undefined;
+  generatedAt?: string | undefined;
+  backgroundRemoved?: boolean | undefined;
+}
+
+export interface GDResourceEditorMetadata {
+  source: "manual" | "generated" | "procedural";
+  generation?: GDResourceGenerationMetadata | undefined;
+  /** Editable SFXR values; kept generic so imported audio remains format-agnostic. */
+  sfx?: Record<string, number | string> | undefined;
+}
+
 export interface GDResource {
   name: string;
   kind: "image" | "audio" | "font" | "json" | "video";
   /** file name as stored in the project folder */
   file: string;
-  /** resolved url in the browser (asset registry) */
+  /** Resolved browser URL. Imported/generated files use a persistent data URL. */
   url?: string | undefined;
+  /** Legacy metadata text kept for GDevelop-compatible project round trips. */
   metadata?: string | undefined;
+  /** Structured, user-inspectable provenance and procedural settings. */
+  editorMetadata?: GDResourceEditorMetadata | undefined;
   alwaysLoaded?: boolean | undefined;
   /** size in KB, shown in the resources list like GDevelop does */
   size?: number | undefined;

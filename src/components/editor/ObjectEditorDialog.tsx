@@ -231,7 +231,7 @@ export function ObjectEditorDialog() {
                     </p>
                   ) : null}
                   {animation.images.map((image, index) => {
-                    const url = resolveAsset(image.image);
+                    const url = resolveAsset(image.image, project.resources);
                     return (
                       <button
                         key={`${image.image}-${index}`}
@@ -679,8 +679,8 @@ function MaskEditor({
   animationIndex: number;
   frameIndex: number;
 }) {
-  const { dispatch } = useEditor();
-  const url = resolveAsset(frame?.image);
+  const { dispatch, project } = useEditor();
+  const url = resolveAsset(frame?.image, project.resources);
   if (!frame) {
     return (
       <p className="mt-3 rounded border border-separator p-2 text-[12px] text-text-secondary">
@@ -688,72 +688,262 @@ function MaskEditor({
       </p>
     );
   }
+
+  const hitBox = frame.hitBox;
+  const update = (patch: Partial<NonNullable<GDAnimationFrameImage["hitBox"]>>) => {
+    if (!hitBox) return;
+    const next: NonNullable<GDAnimationFrameImage["hitBox"]> = {
+      ...hitBox,
+      ...patch,
+      source: "manual",
+    };
+    next.width = Math.max(1, Number.isFinite(next.width) ? next.width : hitBox.width);
+    next.height = Math.max(1, Number.isFinite(next.height) ? next.height : hitBox.height);
+    if (next.referenceWidth !== undefined) next.referenceWidth = Math.max(1, next.referenceWidth);
+    if (next.referenceHeight !== undefined)
+      next.referenceHeight = Math.max(1, next.referenceHeight);
+    if (next.kind === "rectangle") {
+      next.vertices = [
+        { x: next.x, y: next.y },
+        { x: next.x + next.width, y: next.y },
+        { x: next.x + next.width, y: next.y + next.height },
+        { x: next.x, y: next.y + next.height },
+      ];
+    }
+    dispatch({
+      type: "updateObjectFrame",
+      objectId,
+      animationIndex,
+      frameIndex,
+      patch: { hitBox: next },
+    });
+  };
+  const enable = () => {
+    dispatch({
+      type: "updateObjectFrame",
+      objectId,
+      animationIndex,
+      frameIndex,
+      patch: {
+        hitBox: {
+          kind: "rectangle",
+          x: 0,
+          y: 0,
+          width: 64,
+          height: 64,
+          referenceWidth: 64,
+          referenceHeight: 64,
+          vertices: [
+            { x: 0, y: 0 },
+            { x: 64, y: 0 },
+            { x: 64, y: 64 },
+            { x: 0, y: 64 },
+          ],
+          source: "manual",
+        },
+      },
+    });
+  };
+
   return (
     <div className="mt-3 rounded border border-separator">
-      <div className="border-b border-separator bg-[#25252E] px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-[#D6DEEC]">
-        Máscara de colisión
+      <div className="flex items-center border-b border-separator bg-[#25252E] px-2 py-1 text-[11px] font-semibold uppercase tracking-wide text-[#D6DEEC]">
+        Máscara de colisión editable
+        {hitBox?.source === "detected" ? (
+          <span className="ml-2 rounded bg-[#3D4D51] px-1.5 py-0.5 text-[9px] normal-case text-[#8AD6FF]">
+            sugerida automáticamente
+          </span>
+        ) : null}
+        <button
+          type="button"
+          onClick={() =>
+            hitBox
+              ? dispatch({
+                  type: "updateObjectFrame",
+                  objectId,
+                  animationIndex,
+                  frameIndex,
+                  patch: { hitBox: undefined },
+                })
+              : enable()
+          }
+          className="ml-auto rounded bg-elevated px-2 py-0.5 text-[10px] normal-case text-foreground hover:bg-selection"
+        >
+          {hitBox ? "Usar caja completa" : "Crear máscara personalizada"}
+        </button>
       </div>
-      <div className="flex flex-wrap items-center gap-3 p-2">
-        <div className="relative shrink-0 rounded border border-separator bg-[#101017] p-2">
+      <div className="flex flex-wrap items-start gap-3 p-2">
+        <div className="relative grid h-36 w-36 shrink-0 place-items-center overflow-hidden rounded border border-separator bg-[#101017] p-2">
           {url ? (
-            <img src={url} alt="" className="max-h-24 object-contain [image-rendering:pixelated]" />
+            <img
+              src={url}
+              alt=""
+              className="max-h-full max-w-full object-contain [image-rendering:pixelated]"
+            />
           ) : (
             <div className="grid h-20 w-20 place-items-center text-[11px] text-text-placeholder">
               sin imagen
             </div>
           )}
-          <div
-            className="pointer-events-none absolute border border-[#FF85ED]"
-            style={{
-              left: 8 + (frame.originX ?? 0),
-              top: 8 + (frame.originY ?? 0),
-              right: 8 - (frame.originX ?? 0) - 1,
-              bottom: 8 - (frame.originY ?? 0) - 1,
-            }}
-          />
+          {hitBox ? (
+            <svg
+              viewBox={`0 0 ${hitBox.referenceWidth ?? Math.max(1, hitBox.x + hitBox.width)} ${hitBox.referenceHeight ?? Math.max(1, hitBox.y + hitBox.height)}`}
+              preserveAspectRatio="xMidYMid meet"
+              className="pointer-events-none absolute inset-2 h-[calc(100%_-_1rem)] w-[calc(100%_-_1rem)]"
+              aria-hidden="true"
+            >
+              <polygon
+                points={(hitBox.kind === "polygon" && hitBox.vertices.length >= 3
+                  ? hitBox.vertices
+                  : [
+                      { x: hitBox.x, y: hitBox.y },
+                      { x: hitBox.x + hitBox.width, y: hitBox.y },
+                      { x: hitBox.x + hitBox.width, y: hitBox.y + hitBox.height },
+                      { x: hitBox.x, y: hitBox.y + hitBox.height },
+                    ]
+                )
+                  .map((point) => `${point.x},${point.y}`)
+                  .join(" ")}
+                fill="rgba(255,133,237,0.15)"
+                stroke="#FF85ED"
+                vectorEffect="non-scaling-stroke"
+              />
+            </svg>
+          ) : null}
         </div>
-        <div className="min-w-56 flex-1 text-[12px] text-text-secondary">
-          <p>
-            El motor de Nexus Engine usa la caja delimitadora del fotograma para las colisiones.
-            Ajusta aquí el recorte (en píxeles, desde el origen) si necesitas una máscara más
-            estrecha.
-          </p>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            <label className="flex items-center gap-1">
-              <span className="w-16 text-[11px]">Recorte X</span>
-              <input
-                type="number"
-                value={frame.originX}
-                onChange={(event) =>
-                  dispatch({
-                    type: "updateObjectFrame",
-                    objectId,
-                    animationIndex,
-                    frameIndex,
-                    patch: { originX: Number(event.target.value) },
-                  })
-                }
-                className="h-7 w-full rounded border border-separator bg-[#1D1D26] px-1 tabular-nums outline-none focus:border-[var(--brand-light)]"
-              />
-            </label>
-            <label className="flex items-center gap-1">
-              <span className="w-16 text-[11px]">Recorte Y</span>
-              <input
-                type="number"
-                value={frame.originY}
-                onChange={(event) =>
-                  dispatch({
-                    type: "updateObjectFrame",
-                    objectId,
-                    animationIndex,
-                    frameIndex,
-                    patch: { originY: Number(event.target.value) },
-                  })
-                }
-                className="h-7 w-full rounded border border-separator bg-[#1D1D26] px-1 tabular-nums outline-none focus:border-[var(--brand-light)]"
-              />
-            </label>
-          </div>
+
+        <div className="min-w-60 flex-1 text-[12px] text-text-secondary">
+          {!hitBox ? (
+            <p>
+              El motor usa la caja completa. Crea una máscara para ajustar manualmente las
+              dimensiones o sus vértices; los resultados generados por IA aparecen aquí también.
+            </p>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                <label className="text-[11px]">
+                  Forma
+                  <select
+                    value={hitBox.kind}
+                    onChange={(event) =>
+                      update({ kind: event.target.value as "rectangle" | "polygon" })
+                    }
+                    className="mt-0.5 h-7 w-full rounded border border-separator bg-[#1D1D26] px-1 text-foreground"
+                  >
+                    <option value="rectangle">Rectángulo</option>
+                    <option value="polygon">Polígono convexo</option>
+                  </select>
+                </label>
+                {(
+                  [
+                    ["x", "X"],
+                    ["y", "Y"],
+                    ["width", "Ancho"],
+                    ["height", "Alto"],
+                    ["referenceWidth", "Ancho fuente"],
+                    ["referenceHeight", "Alto fuente"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <label key={key} className="text-[11px]">
+                    {label}
+                    <input
+                      type="number"
+                      min={key === "width" || key === "height" ? 1 : undefined}
+                      value={hitBox[key] ?? (key.includes("Width") ? hitBox.width : hitBox.height)}
+                      onChange={(event) =>
+                        update({
+                          [key]: Number(event.target.value),
+                        } as Partial<NonNullable<GDAnimationFrameImage["hitBox"]>>)
+                      }
+                      className="mt-0.5 h-7 w-full rounded border border-separator bg-[#1D1D26] px-1 tabular-nums text-foreground outline-none focus:border-[var(--brand-light)]"
+                    />
+                  </label>
+                ))}
+              </div>
+
+              {hitBox.kind === "polygon" ? (
+                <div className="mt-2 rounded border border-separator p-1.5">
+                  <div className="mb-1 flex items-center text-[10.5px] font-medium uppercase tracking-wide text-[#D6DEEC]">
+                    Vértices
+                    <button
+                      type="button"
+                      onClick={() =>
+                        update({
+                          vertices: [
+                            ...hitBox.vertices,
+                            {
+                              x:
+                                ((hitBox.vertices.at(-1)?.x ?? hitBox.x) +
+                                  (hitBox.vertices[0]?.x ?? hitBox.x + hitBox.width)) /
+                                2,
+                              y:
+                                ((hitBox.vertices.at(-1)?.y ?? hitBox.y) +
+                                  (hitBox.vertices[0]?.y ?? hitBox.y)) /
+                                2,
+                            },
+                          ],
+                        })
+                      }
+                      className="ml-auto flex items-center gap-1 rounded bg-elevated px-1.5 py-0.5 normal-case text-foreground"
+                    >
+                      <Plus className="h-3 w-3" /> Añadir
+                    </button>
+                  </div>
+                  <div className="grid max-h-28 gap-1 overflow-y-auto sm:grid-cols-2">
+                    {hitBox.vertices.map((point, index) => (
+                      <div key={index} className="flex items-center gap-1">
+                        <span className="w-4 text-[10px] text-text-placeholder">{index + 1}</span>
+                        <input
+                          type="number"
+                          aria-label={`X del vértice ${index + 1}`}
+                          value={point.x}
+                          onChange={(event) =>
+                            update({
+                              vertices: hitBox.vertices.map((candidate, pointIndex) =>
+                                pointIndex === index
+                                  ? { ...candidate, x: Number(event.target.value) }
+                                  : candidate,
+                              ),
+                            })
+                          }
+                          className="h-6 min-w-0 flex-1 rounded border border-separator bg-[#101017] px-1 text-foreground"
+                        />
+                        <input
+                          type="number"
+                          aria-label={`Y del vértice ${index + 1}`}
+                          value={point.y}
+                          onChange={(event) =>
+                            update({
+                              vertices: hitBox.vertices.map((candidate, pointIndex) =>
+                                pointIndex === index
+                                  ? { ...candidate, y: Number(event.target.value) }
+                                  : candidate,
+                              ),
+                            })
+                          }
+                          className="h-6 min-w-0 flex-1 rounded border border-separator bg-[#101017] px-1 text-foreground"
+                        />
+                        <button
+                          type="button"
+                          disabled={hitBox.vertices.length <= 3}
+                          onClick={() =>
+                            update({
+                              vertices: hitBox.vertices.filter(
+                                (_, pointIndex) => pointIndex !== index,
+                              ),
+                            })
+                          }
+                          className="text-text-secondary hover:text-destructive disabled:opacity-30"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+            </>
+          )}
         </div>
       </div>
     </div>

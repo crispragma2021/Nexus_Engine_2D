@@ -21,12 +21,12 @@ export function ProjectTitlebar() {
     setSaving(true);
     try {
       const result = await saveProjectEverywhere(project);
+      dispatch({ type: "markSaved" });
       if (result.local) window.alert?.("Guardado en este dispositivo");
-    } catch {
-      /* keep the editor usable if storage is unavailable */
+    } catch (error) {
+      window.alert?.(error instanceof Error ? error.message : "No se pudo guardar el proyecto.");
     } finally {
       setSaving(false);
-      dispatch({ type: "markSaved" });
     }
   };
 

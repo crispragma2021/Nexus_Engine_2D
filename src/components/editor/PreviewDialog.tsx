@@ -34,6 +34,7 @@ export function PreviewDialog() {
   const canvasRef = React.useRef<HTMLCanvasElement | null>(null);
   const runtimeRef = React.useRef<GameRuntime | null>(null);
   const rafRef = React.useRef<number | null>(null);
+  const playingAudioRef = React.useRef<Set<HTMLAudioElement>>(new Set());
   const [paused, setPaused] = React.useState(false);
   const [fps, setFps] = React.useState(0);
   const [screen, setScreen] = React.useState("window");
@@ -42,33 +43,65 @@ export function PreviewDialog() {
   const [status, setStatus] = React.useState("");
   const [tick, setTick] = React.useState(0);
 
+  const stopAudio = React.useCallback(() => {
+    for (const audio of playingAudioRef.current) {
+      audio.pause();
+      audio.currentTime = 0;
+    }
+    playingAudioRef.current.clear();
+  }, []);
+
   const close = () => {
+    stopAudio();
     dispatch({ type: "ui", patch: { previewOpen: false, previewWithDebugger: false } });
   };
 
   // (Re)start the runtime for the current scene, wiring the sounds and scene
   // changes back to this dialog (like GDevelop's preview bridge).
   const start = React.useCallback(() => {
+    stopAudio();
     const runtime = new GameRuntime(
       toRuntimeScene(project, scene),
       {
-        onPlaySound: (file, volume, loop) =>
-          setStatus(`♪ ${file}${loop ? " (bucle)" : ""} · ${Math.round(volume * 100)}%`),
-        onStopSound: (channel) => setStatus(`■ canal ${channel} detenido`),
+        onPlaySound: (file, volume, loop) => {
+          const url = resolveAsset(file, project.resources);
+          if (!url) {
+            setStatus(`⚠ No se encontró el audio «${file}».`);
+            return;
+          }
+          const audio = new Audio(url);
+          audio.volume = Math.max(0, Math.min(1, volume));
+          audio.loop = loop;
+          playingAudioRef.current.add(audio);
+          audio.addEventListener("ended", () => playingAudioRef.current.delete(audio), {
+            once: true,
+          });
+          void audio.play().catch(() => {
+            playingAudioRef.current.delete(audio);
+            setStatus(`⚠ El navegador bloqueó la reproducción de «${file}».`);
+          });
+          setStatus(`♪ ${file}${loop ? " (bucle)" : ""} · ${Math.round(volume * 100)}%`);
+        },
+        onStopSound: (channel) => {
+          stopAudio();
+          setStatus(`■ canal ${channel} detenido`);
+        },
         onChangeScene: (name) => setStatus(`Escena → ${name}`),
+        onDiagnostic: (diagnostic) => setStatus(`⚠ ${diagnostic.message}`),
       },
       project,
     );
     runtimeRef.current = runtime;
     setTick((value) => value + 1);
     return runtime;
-  }, [project, scene]);
+  }, [project, scene, stopAudio]);
 
   React.useEffect(() => {
     if (!open) {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
       runtimeRef.current = null;
+      stopAudio();
       setPaused(false);
       setStatus("");
       return;
@@ -125,7 +158,7 @@ export function PreviewDialog() {
         width: current.width,
         height: current.height,
         background: `rgb(${backgroundColor.split(";").join(",")})`,
-        resolve: resolveAsset,
+        resolve: (name) => resolveAsset(name, project.resources),
         scale: wantedWidth / (current.width || 1),
       });
     };
@@ -134,10 +167,11 @@ export function PreviewDialog() {
     return () => {
       if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
+      stopAudio();
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
     };
-  }, [open, start, paused, project, ui.previewWithDebugger]);
+  }, [open, start, paused, project, stopAudio, ui.previewWithDebugger]);
 
   const runtime = runtimeRef.current;
   const size = SCREENS.find((entry) => entry.id === screen);

@@ -18,7 +18,7 @@ const GROUPS: Array<{ key: FilterKey; title: string; options: string[] }> = [
   {
     key: "objectType",
     title: "Tipo de objetos",
-    options: ["Sprite", "Sprite en mosaico", "Panel de sprite", "Modelo 3D", "Mapa de baldosas"],
+    options: ["Sprite", "Sprite en mosaico", "Panel de sprite", "Mapa de baldosas"],
   },
 ];
 

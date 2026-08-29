@@ -27,9 +27,11 @@ import { ProjectPropertiesDialog, VariablesDialog } from "./ProjectPropertiesDia
 import { InstructionSelectorDialog } from "./InstructionSelectorDialog";
 import { PreviewDialog } from "./PreviewDialog";
 import { ProjectManagerDrawer } from "./ProjectManagerDrawer";
-import { AskAiDialog } from "./AskAiDialog";
+import { InlineAiPrompt } from "./InlineAiPrompt";
+import { QuickAutomationBar } from "./QuickAutomationBar";
 import { useEditorShortcuts } from "./hooks/use-editor-shortcuts";
 import * as React from "react";
+import { toast } from "sonner";
 
 /** Escena / Eventos switcher of the active scene tab. */
 function SceneSubTabs() {
@@ -157,10 +159,40 @@ function Workspace() {
   );
 }
 
+function InlineAiOverlay() {
+  const { ui, dispatch, applyInlineAiPrompt } = useEditor();
+  const session = ui.inlineAi;
+  const close = React.useCallback(() => dispatch({ type: "closeInlineAi" }), [dispatch]);
+  const apply = React.useCallback(
+    async (prompt: string, targetName?: string) => {
+      try {
+        const summary = await applyInlineAiPrompt(prompt, targetName);
+        toast.success(summary);
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : "No se pudo aplicar la edición con IA.",
+        );
+        throw error;
+      }
+    },
+    [applyInlineAiPrompt],
+  );
+
+  if (!session) return null;
+  return (
+    <InlineAiPrompt
+      x={session.x}
+      y={session.y}
+      {...(session.targetName ? { targetName: session.targetName } : {})}
+      onApply={apply}
+      onClose={close}
+    />
+  );
+}
+
 function Body() {
   const { ui } = useEditor();
   useEditorShortcuts();
-  const [askOpen, setAskOpen] = React.useState(false);
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-window text-foreground">
@@ -172,6 +204,7 @@ function Body() {
         {ui.showRightPanel ? <RightColumn /> : null}
       </main>
       <MobileBottomBar />
+      <QuickAutomationBar />
 
       {/* dialogs */}
       <NewObjectDialog />
@@ -184,7 +217,7 @@ function Body() {
       <InstructionSelectorDialog />
       <PreviewDialog />
       <ProjectManagerDrawer />
-      <AskAiDialog open={askOpen} onOpenChange={setAskOpen} />
+      <InlineAiOverlay />
     </div>
   );
 }

@@ -24,12 +24,12 @@
 
 Es la única parte que **no** se copia de GDevelop. Reglas para respetarla:
 
-| Pieza | Rol | Convención |
-| --- | --- | --- |
-| `src/lib/runtime/types.ts` | estado vivo mutable (`RTObject`, `RuntimeState`, `PHYSICS`) | tipos planos, sin clases, `Record<string, string>` para variables |
-| `src/lib/runtime/expression.ts` | mini-evaluador de expresiones (`evalNumber`, `evalString`, `asNumber`) | mismo API; ampliar funciones sin romper firma |
-| `src/lib/runtime/engine.ts` | `GameRuntime`: interpreta el árbol de eventos y simula el frame | `switch (instruction.typeId)` en `evalCondition` / `runAction`; **nunca** `eval` de JS del usuario; `step(deltaSeconds)` único bucle |
-| `src/lib/runtime/renderer.ts` | Canvas 2D a partir de `RuntimeState` | dibujo determinista, caché de imágenes, sin estado de juego |
+| Pieza                           | Rol                                                                    | Convención                                                                                                                           |
+| ------------------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/lib/runtime/types.ts`      | estado vivo mutable (`RTObject`, `RuntimeState`, `PHYSICS`)            | tipos planos, sin clases, `Record<string, string>` para variables                                                                    |
+| `src/lib/runtime/expression.ts` | mini-evaluador de expresiones (`evalNumber`, `evalString`, `asNumber`) | mismo API; ampliar funciones sin romper firma                                                                                        |
+| `src/lib/runtime/engine.ts`     | `GameRuntime`: interpreta el árbol de eventos y simula el frame        | `switch (instruction.typeId)` en `evalCondition` / `runAction`; **nunca** `eval` de JS del usuario; `step(deltaSeconds)` único bucle |
+| `src/lib/runtime/renderer.ts`   | Canvas 2D a partir de `RuntimeState`                                   | dibujo determinista, caché de imágenes, sin estado de juego                                                                          |
 
 Añadir una instrucción nueva = 3 pasos y nada más: ① entrada en `src/lib/editor/instructions.ts`
 (catálogo con `sentence` y parámetros tipados), ② `case` en `engine.ts`, ③ si toca render,
@@ -45,24 +45,24 @@ motor sigue intacto aunque el editor soporte N escenas, layouts externos y event
 
 Nada de hex sueltos en componentes: todo pasa por las variables de `src/styles.css`.
 
-| Rol | Valor oficial | Token |
-| --- | --- | --- |
-| Ventana / canvas | `#1D1D26` | `--window` |
-| Toolbar y paneles | `#25252E` | `--toolbar` |
-| Superficie elevada / campos | `#32323B` | `--elevated` |
-| Separadores / barra de búsqueda | `#494952` | `--separator`, `--search-bar` |
-| Selección de fila | `#3E4452` | `--selection` |
-| Hover de lista | `#2f2f36` | `--list-hover` |
-| Marca (Nexus = morado GDevelop) | `#7046EC` / `#4F28CD` / `#37238F` | `--brand`, `--brand-dark`, `--brand-darkest` |
-| Enlace / link-hover | `#DDD1FF` / `#C9B6FC` | `--link`, `--link-hover` |
-| Éxito (Play/hot reload) | `#45D9A1` | `--success` |
-| Texto secundario / deshabilitado / placeholder | `#C5C5C9` / `#9AA1AD` / `#A6A6AB` | `--text-secondary`, `--text-disabled`, `--text-placeholder` |
-| Hoja de eventos | `#282C34` (fila) · `#25252E` (condiciones) · `#1D1D26` (acciones) | `--ev-row`, `--ev-conditions`, `--ev-actions` |
-| Parámetros de instrucción | base `#0ECD7A` · número `#E0D01F` · objeto `#A483FF` · comportamiento `#9AA5CE` · operador `#FF85ED` · variable `#8AD6FF` · error `#FE6C46` | `--param-*` |
-| Cuadrícula del editor | `rgba(158,180,255,0.8)` | `--grid-line` |
-| Selección/marquesina del canvas | `#6868e8`, handles relleno blanco + borde `#6868e8` | `--select-indigo` |
-| Pestañas | barra `#32323B`, texto `#7F7F85`, activa `#494952` / `#F6F2FF`; pestaña cerrable activa `#25252E` borde `#7F7F85` | `--tabs-*`, `--closable-tab-*` |
-| Tablas (`table.*`) | header `#25252E`, impar `#23232A`, par `#1D1D26`, borde `#282C34`, texto `#ABB2BF` | `--table-*` |
+| Rol                                            | Valor oficial                                                                                                                               | Token                                                       |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| Ventana / canvas                               | `#1D1D26`                                                                                                                                   | `--window`                                                  |
+| Toolbar y paneles                              | `#25252E`                                                                                                                                   | `--toolbar`                                                 |
+| Superficie elevada / campos                    | `#32323B`                                                                                                                                   | `--elevated`                                                |
+| Separadores / barra de búsqueda                | `#494952`                                                                                                                                   | `--separator`, `--search-bar`                               |
+| Selección de fila                              | `#3E4452`                                                                                                                                   | `--selection`                                               |
+| Hover de lista                                 | `#2f2f36`                                                                                                                                   | `--list-hover`                                              |
+| Marca (Nexus = morado GDevelop)                | `#7046EC` / `#4F28CD` / `#37238F`                                                                                                           | `--brand`, `--brand-dark`, `--brand-darkest`                |
+| Enlace / link-hover                            | `#DDD1FF` / `#C9B6FC`                                                                                                                       | `--link`, `--link-hover`                                    |
+| Éxito (Play/hot reload)                        | `#45D9A1`                                                                                                                                   | `--success`                                                 |
+| Texto secundario / deshabilitado / placeholder | `#C5C5C9` / `#9AA1AD` / `#A6A6AB`                                                                                                           | `--text-secondary`, `--text-disabled`, `--text-placeholder` |
+| Hoja de eventos                                | `#282C34` (fila) · `#25252E` (condiciones) · `#1D1D26` (acciones)                                                                           | `--ev-row`, `--ev-conditions`, `--ev-actions`               |
+| Parámetros de instrucción                      | base `#0ECD7A` · número `#E0D01F` · objeto `#A483FF` · comportamiento `#9AA5CE` · operador `#FF85ED` · variable `#8AD6FF` · error `#FE6C46` | `--param-*`                                                 |
+| Cuadrícula del editor                          | `rgba(158,180,255,0.8)`                                                                                                                     | `--grid-line`                                               |
+| Selección/marquesina del canvas                | `#6868e8`, handles relleno blanco + borde `#6868e8`                                                                                         | `--select-indigo`                                           |
+| Pestañas                                       | barra `#32323B`, texto `#7F7F85`, activa `#494952` / `#F6F2FF`; pestaña cerrable activa `#25252E` borde `#7F7F85`                           | `--tabs-*`, `--closable-tab-*`                              |
+| Tablas (`table.*`)                             | header `#25252E`, impar `#23232A`, par `#1D1D26`, borde `#282C34`, texto `#ABB2BF`                                                          | `--table-*`                                                 |
 
 **Tema claro**: GDevelop lo tiene (`DefaultLightTheme`); aquí el producto es dark-only por
 decisión de producto, no por olvido. No introducir `light:` ad-hoc.
@@ -141,9 +141,10 @@ Y en el navegador: tema, densidad, hover, selección y drag & drop **se ven igua
 GDevelop; la paleta no se altera; ningún botón decorativo sin acción (o se marca como
 pendiente en `docs/GAP-ANALYSIS.md`).
 
-## 4. Fuera de alcance deliberado (por ahora)
+## 4. Fuera de alcance deliberado
 
-`GameplayTests`, `VersionHistory`, `Leaderboard`, `MarketingPlans`, `InAppTutorial`,
-`3D`, editor de extensiones JS (`EventsFunctionsExtensionEditor`), exportaciones nativas
-(Android/iOS/Electron) y `HotReload` multi-ventana. Están listados en el gap analysis con
-su ruta de implementación sugerida.
+Nexus Engine es un producto exclusivamente 2D: `3D` no forma parte de su alcance.
+También quedan fuera por ahora `GameplayTests`, `VersionHistory`, `Leaderboard`,
+`MarketingPlans`, `InAppTutorial`, el editor de extensiones JS
+(`EventsFunctionsExtensionEditor`), las exportaciones nativas (Android/iOS/Electron)
+y `HotReload` multi-ventana.

@@ -32,7 +32,7 @@ export interface AssetPack {
   credits: number;
   kind: "Gratuito" | "Premium" | "Propio";
   view: "Arriba-abajo" | "Vista lateral" | "Isométrico";
-  objectType: "Sprite" | "Sprite en mosaico" | "Panel de sprite" | "Modelo 3D" | "Mapa de baldosas";
+  objectType: "Sprite" | "Sprite en mosaico" | "Panel de sprite" | "Mapa de baldosas";
   gradient: string;
 }
 
@@ -50,8 +50,8 @@ export const COURSES: Course[] = [
   },
   {
     id: "c2",
-    title: "Crea un juego 3D de acción",
-    description: "Crea tu juego 3D en el que se corre, conduce y lucha contra enemigos.",
+    title: "Crea un juego 2D de acción",
+    description: "Crea un juego 2D con movimiento, vehículos y enemigos dinámicos.",
     level: "Intermedio",
     credits: 1000,
     progress: 0,
@@ -71,7 +71,12 @@ export const COURSES: Course[] = [
 ];
 
 export const TEMPLATES: Template[] = [
-  { id: "t1", title: "FPS 3D Multiplayer", credits: 1000, gradient: "from-[#232336] to-[#4F28CD]" },
+  {
+    id: "t1",
+    title: "Arena 2D Multiplayer",
+    credits: 1000,
+    gradient: "from-[#232336] to-[#4F28CD]",
+  },
   {
     id: "t2",
     title: "Action Platformer Pixel",
@@ -157,12 +162,12 @@ export const ASSET_PACKS: AssetPack[] = [
   },
   {
     id: "a6",
-    title: "Low-poly Props",
+    title: "Efectos de combate 2D",
     author: "Volu",
     credits: 800,
     kind: "Premium",
     view: "Isométrico",
-    objectType: "Modelo 3D",
+    objectType: "Sprite",
     gradient: "from-[#1D1030] to-[#C9B6FC]",
   },
 ];

@@ -1,56 +1,15 @@
-import { useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
-import { Coins, Plus, RefreshCw, SendHorizonal, X } from "lucide-react";
+import { Coins, Plus, RefreshCw } from "lucide-react";
 import { TEMPLATES } from "@/lib/home/data";
 import { ProjectsSection } from "./ProjectsSection";
-import { NexusMark } from "@/components/brand/NexusLogo";
 
 interface Props {
   onCreateGame: () => void;
 }
 
 export function CreateView({ onCreateGame }: Props) {
-  const [askOpen, setAskOpen] = useState(true);
-  const [prompt, setPrompt] = useState("");
-  const navigate = useNavigate();
-
   return (
     <div className="h-full overflow-y-auto p-4 pb-8">
-      {askOpen && (
-        <section className="rounded-lg border border-[#FF8569]/60 bg-toolbar p-3">
-          <div className="mb-2 flex items-center gap-2">
-            <NexusMark className="size-7 rounded-md" />
-            <h2 className="flex-1 text-lg font-bold text-foreground">¿Qué te gustaría crear?</h2>
-            <button
-              type="button"
-              onClick={() => setAskOpen(false)}
-              aria-label="Cerrar sugerencia"
-              className="p-1 text-muted-foreground"
-            >
-              <X className="size-5" />
-            </button>
-          </div>
-          <textarea
-            value={prompt}
-            onChange={(e) => setPrompt(e.target.value)}
-            rows={2}
-            placeholder="Comienza un juego de preguntas y respuestas con una pregunta y 4 respuestas"
-            className="w-full resize-none bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
-          />
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={onCreateGame}
-              aria-label="Enviar idea"
-              className="rounded-md bg-elevated p-2 text-muted-foreground"
-            >
-              <SendHorizonal className="size-5" />
-            </button>
-          </div>
-        </section>
-      )}
-
-      <section className="mt-5 rounded-lg border border-separator bg-toolbar p-4">
+      <section className="rounded-lg border border-separator bg-toolbar p-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-bold text-foreground">Cartera</h2>
           <span className="flex items-center gap-2 text-base font-semibold text-foreground">
@@ -85,15 +44,10 @@ export function CreateView({ onCreateGame }: Props) {
         </button>
       </div>
 
-      <h3 className="mt-5 text-xl font-bold text-foreground">Mezcla un juego en 2 minutos</h3>
+      <h3 className="mt-5 text-xl font-bold text-foreground">Ideas para tu próximo juego 2D</h3>
       <div className="mt-3 grid grid-cols-2 gap-4">
         {TEMPLATES.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            onClick={() => void navigate({ to: "/editor" })}
-            className="text-left"
-          >
+          <button key={t.id} type="button" onClick={onCreateGame} className="text-left">
             <span className={`block h-28 rounded-lg bg-gradient-to-br ${t.gradient}`} aria-hidden />
             <span className="mt-2 block text-sm text-foreground">{t.title}</span>
           </button>

@@ -17,6 +17,69 @@ import { uid } from "./ids";
 /** GDevelop keeps the base layer name untranslated in the project file. */
 export const BASE_LAYER_NAME = "Base layer";
 
+export interface EmptyProjectOptions {
+  name: string;
+  windowWidth: number;
+  windowHeight: number;
+  pixelArt?: boolean;
+}
+
+/** Creates the canonical blank 2D project used by every product entry point. */
+export function createEmptyProject(options: EmptyProjectOptions): GDProject {
+  const name = options.name.trim() || "Proyecto sin título";
+  const windowWidth = clampDimension(options.windowWidth, 800);
+  const windowHeight = clampDimension(options.windowHeight, 600);
+  const sceneName = "Escena 1";
+  const orientation =
+    windowWidth === windowHeight ? "any" : windowWidth > windowHeight ? "landscape" : "portrait";
+
+  return {
+    name,
+    version: "1.0.0",
+    firstLayoutName: sceneName,
+    scenes: [makeScene(sceneName)],
+    resources: [],
+    globalVariables: [],
+    externalEvents: [],
+    externalLayouts: [],
+    extensions: [],
+    gameSettings: {
+      author: "",
+      description: "",
+      version: "1.0.0",
+      packageName: "com.nexusengine.game",
+      orientation,
+      windowWidth,
+      windowHeight,
+      useWindowSizeAsBaseSize: true,
+      magnification: 1,
+      minFPS: 30,
+      maxFPS: 60,
+      adaptGameResolutionAtRuntime: true,
+      scaleMode: options.pixelArt ? "nearest" : "linear",
+      windowMode: "default",
+      startScene: sceneName,
+      pauseOnLostFocus: false,
+      renderOutsideGameArea: false,
+      loadingScreen: {
+        displayBrandSplash: true,
+        minDuration: 0,
+        fadeInDuration: 0,
+        fadeOutDuration: 0,
+        backgroundColor: "#1D1D26",
+      },
+      watermark: { showOnMobile: false },
+      projectUuid: uid("nexus"),
+      folderPolicy: "doNotUse",
+    },
+  };
+}
+
+function clampDimension(value: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.min(7680, Math.max(1, Math.round(value)));
+}
+
 export function makeScene(name: string, patch: Partial<GDScene> = {}): GDScene {
   return {
     name,

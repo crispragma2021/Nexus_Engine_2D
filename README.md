@@ -1,15 +1,17 @@
 # Nexus Engine
 
-**Nexus Engine** es un **2D/3D Game Engine** orientado a crear, aprender y publicar juegos desde una experiencia visual. El editor combina escenas, objetos, capas, propiedades y eventos sin código con una base preparada para ampliar el runtime hacia experiencias 2D y 3D.
+**Nexus Engine** es un **motor de juegos 2D** orientado a crear, aprender y publicar juegos desde una experiencia visual. El editor combina escenas, objetos, capas, propiedades y eventos sin código sobre un runtime 2D propio.
 
 ## Estado del proyecto
 
-La versión `v0.1.0` ofrece una primera experiencia funcional del editor visual 2D, un runtime propio en TypeScript, persistencia local de proyectos y una interfaz adaptada a escritorio y móvil. La arquitectura mantiene separados el editor, el runtime y los catálogos para facilitar la evolución de las capacidades 3D.
+La versión `v0.1.0` ofrece una primera experiencia funcional del editor visual 2D, un runtime propio en TypeScript, persistencia local de proyectos y una interfaz adaptada a escritorio y móvil. Nexus Engine está enfocado exclusivamente en juegos 2D.
 
 ## Características
 
 - Editor de escenas y eventos inspirado en flujos de creación visual.
 - Objetos, instancias, capas, grupos, comportamientos, variables y recursos.
+- Automatización híbrida opcional: eventos visuales, sprites, máscaras y SFX generados siguen siendo editables con las herramientas manuales.
+- Importación tradicional de imágenes PNG/JPG/SVG y audio WAV/MP3/OGG.
 - Runtime propio en TypeScript para previsualizar proyectos 2D.
 - Guardado local en el dispositivo.
 - Interfaz responsive con identidad visual Nexus Engine.
@@ -18,7 +20,7 @@ La versión `v0.1.0` ofrece una primera experiencia funcional del editor visual 
 
 ## Desarrollo local
 
-Requisitos: Node.js 20 o superior y [Bun](https://bun.sh/).
+Requisitos: Node.js 22.6 o superior y [Bun](https://bun.sh/).
 
 ```sh
 bun install
@@ -29,6 +31,7 @@ Comandos de verificación:
 
 ```sh
 bun run icons       # Regenera los iconos Nexus de forma determinista
+bun run test        # Contratos del catálogo y del runtime 2D
 bun run typecheck   # TypeScript sin emitir archivos
 bun run lint        # ESLint
 bun run build       # Build de Vite/TanStack Start

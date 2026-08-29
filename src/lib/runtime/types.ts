@@ -1,6 +1,8 @@
 // Runtime model: the live, mutable state the Nexus Engine TypeScript runtime
 // simulates each frame. Built from one scene of the editor project.
 
+import type { GDFrameHitBox } from "../editor/types";
+
 export interface RTObject {
   /** unique runtime id */
   id: string;
@@ -10,6 +12,8 @@ export interface RTObject {
   type: string;
   /** current image resource (first frame of the current animation) */
   asset?: string;
+  /** Current frame collision geometry, scaled with the runtime instance. */
+  hitBox?: GDFrameHitBox;
   x: number;
   y: number;
   width: number;

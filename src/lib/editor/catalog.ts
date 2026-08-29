@@ -6,6 +6,7 @@ import playerUrl from "../../assets/player.png";
 import coinUrl from "../../assets/coin.png";
 import platformUrl from "../../assets/platform.png";
 import slimeUrl from "../../assets/slime.png";
+import type { GDResource } from "./types";
 
 /** Project files shipped with the sample (GDevelop resolves resources by name). */
 export const PROJECT_ASSETS: Record<string, string> = {
@@ -15,8 +16,17 @@ export const PROJECT_ASSETS: Record<string, string> = {
   "slime.png": slimeUrl,
 };
 
-export const resolveAsset = (name?: string): string | undefined =>
-  name ? PROJECT_ASSETS[name] : undefined;
+export const resolveAsset = (
+  name?: string,
+  resources: readonly GDResource[] = [],
+): string | undefined => {
+  if (!name) return undefined;
+  const resource = resources.find((entry) => entry.name === name || entry.file === name);
+  if (resource?.url) return resource.url;
+  const file = resource?.file || name;
+  if (/^(?:data:|blob:|https?:\/\/)/i.test(file)) return file;
+  return PROJECT_ASSETS[file] ?? PROJECT_ASSETS[name];
+};
 
 export interface ObjectTypeEntry {
   typeId: string;
@@ -108,14 +118,6 @@ export const OBJECT_TYPES: ObjectTypeEntry[] = [
     installable: true,
   },
   {
-    typeId: "Model3DObject::Model3D",
-    name: "Modelo 3D",
-    description: "Modelos 3D (glTF) en un mundo 2D",
-    icon: "model3d",
-    category: "graphics",
-    installable: true,
-  },
-  {
     typeId: "Spine",
     name: "Spine",
     description: "Animaciones óseas exportadas desde Spine",
@@ -143,7 +145,6 @@ export const OBJECT_TYPE_ALIASES: Record<string, string> = {
   "Shape Painter": "PrimitiveDrawing::Drawer",
   Tilemap: "TileMap",
   Video: "VideoObject::Video",
-  "3D Box": "Model3DObject::Model3D",
 };
 
 export const objectTypeId = (type: string): string => OBJECT_TYPE_ALIASES[type] ?? type;

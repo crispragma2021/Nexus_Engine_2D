@@ -32,8 +32,12 @@ export function ProjectsSection() {
   };
 
   const openLocalProject = async (project: LocalProject) => {
-    setCurrentProject({ id: project.id, project: project.project });
-    await navigate({ to: "/editor" });
+    try {
+      setCurrentProject({ id: project.id, project: project.project });
+      await navigate({ to: "/editor" });
+    } catch (error) {
+      window.alert?.(error instanceof Error ? error.message : "No se pudo abrir el proyecto.");
+    }
   };
 
   return (
@@ -85,8 +89,14 @@ export function ProjectsSection() {
                   type="button"
                   aria-label={`Eliminar ${project.name} del dispositivo`}
                   onClick={() => {
-                    deleteLocalProject(project.id);
-                    setLocal(listLocalProjects());
+                    try {
+                      deleteLocalProject(project.id);
+                      setLocal(listLocalProjects());
+                    } catch (error) {
+                      window.alert?.(
+                        error instanceof Error ? error.message : "No se pudo eliminar el proyecto.",
+                      );
+                    }
                   }}
                   className="p-2 text-muted-foreground"
                 >

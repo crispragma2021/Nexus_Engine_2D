@@ -25,13 +25,36 @@ let runtimeIdCounter = 0;
 const nextId = () => `rt_${++runtimeIdCounter}`;
 
 /** A real image resource is optional in tests: the renderer falls back to a box. */
+export type RuntimeInstructionKind = "condition" | "action";
+
+export interface RuntimeDiagnostic {
+  code: "unsupported-instruction" | "invalid-external-events-link";
+  severity: "warning" | "error";
+  message: string;
+  frame: number;
+  eventId: string;
+  typeId?: string;
+  instructionId?: string;
+}
+
 export interface RuntimeOptions {
   /** called when an action requests a scene change */
   onChangeScene?: (scene: string) => void;
   /** called when a sound should play */
   onPlaySound?: (file: string, volume: number, loop: boolean) => void;
+  /** called for positional audio; hosts may fall back to `onPlaySound` */
+  onPlaySoundAtPosition?: (
+    file: string,
+    volume: number,
+    loop: boolean,
+    x: number,
+    y: number,
+    stereoAdjustment: number,
+  ) => void;
   /** called when a sound channel should stop */
   onStopSound?: (channel: number) => void;
+  /** receives deduplicated runtime diagnostics */
+  onDiagnostic?: (diagnostic: RuntimeDiagnostic) => void;
   /** lets `ChangeScene` load another scene of the same project */
   resolveScene?: (name: string) => GDRuntimeScene | null;
 }
@@ -49,6 +72,8 @@ export class GameRuntime {
   private readonly keysReleased = new Set<string>();
   private readonly keysPressedOnce = new Set<string>();
   private readonly mouse = new Set<string>();
+  private readonly reportedDiagnostics = new Set<string>();
+  private readonly activeExternalEvents = new Set<string>();
   private pointer = { x: 0, y: 0 };
 
   constructor(
@@ -173,6 +198,7 @@ export class GameRuntime {
       name: def?.name ?? "Desconocido",
       type: def?.type ?? "Sprite",
       ...(def?.asset ? { asset: def.asset } : {}),
+      ...(frame?.hitBox ? { hitBox: frame.hitBox } : {}),
       x: patch.x,
       y: patch.y,
       width: patch.width,
@@ -257,6 +283,8 @@ export class GameRuntime {
     this.keysReleased.clear();
     this.keysPressedOnce.clear();
     this.mouse.clear();
+    this.reportedDiagnostics.clear();
+    this.activeExternalEvents.clear();
     this.state = this.createState();
   }
 
@@ -411,6 +439,12 @@ export class GameRuntime {
         continue;
       }
 
+      if (event.kind === "link") {
+        previousEventRan = this.runExternalEvents(event, picked, delta);
+        if (previousEventRan) this.state.stats.eventsCount += 1;
+        continue;
+      }
+
       if (event.kind === "else") {
         // "Si no (else)": only runs when the previous sibling event did not run.
         if (previousEventRan !== false) {
@@ -419,22 +453,26 @@ export class GameRuntime {
         }
         previousEventRan = true;
         for (const action of event.actions) {
-          this.runAction(action, picked, delta);
+          if (action.disabled) continue;
+          this.runAction(action, picked, delta, event.id);
           this.state.stats.instructionsCount += 1;
         }
         this.runEvents(event.subEvents, picked, delta);
         continue;
       }
 
-      const conditionsPass = event.conditions.every((condition) => {
+      const activeConditions = event.conditions.filter((condition) => !condition.disabled);
+      const conditionsPass = activeConditions.every((condition) => {
         if (condition.typeId === "BuiltinCommonInstructions::Else") {
           return previousEventRan === false;
         }
         const result = this.evalCondition(condition, picked, delta, event.id);
         this.state.stats.instructionsCount += 1;
+        // An unsupported condition must never become true, even when inverted.
+        if (result === null) return false;
         return condition.inverted ? !result : result;
       });
-      if (event.conditions.length > 0 && !conditionsPass) {
+      if (activeConditions.length > 0 && !conditionsPass) {
         previousEventRan = false;
         continue;
       }
@@ -442,11 +480,33 @@ export class GameRuntime {
       this.state.stats.eventsCount += 1;
 
       for (const action of event.actions) {
-        this.runAction(action, picked, delta);
+        if (action.disabled) continue;
+        this.runAction(action, picked, delta, event.id);
         this.state.stats.instructionsCount += 1;
       }
       this.runEvents(event.subEvents, picked, delta);
     }
+  }
+
+  private runExternalEvents(event: GDEvent, picked: PickMap, delta: number): boolean {
+    const name = event.linkToEventsName?.trim() ?? "";
+    const externalEvents = this.project?.externalEvents.find((entry) => entry.name === name);
+    if (!name || !externalEvents) {
+      this.reportInvalidExternalEventsLink(event.id, name, "no existe");
+      return false;
+    }
+    if (this.activeExternalEvents.has(name)) {
+      this.reportInvalidExternalEventsLink(event.id, name, "crearía una referencia circular");
+      return false;
+    }
+
+    this.activeExternalEvents.add(name);
+    try {
+      this.runEvents(externalEvents.events, picked, delta);
+    } finally {
+      this.activeExternalEvents.delete(name);
+    }
+    return true;
   }
 
   private evalCondition(
@@ -454,7 +514,7 @@ export class GameRuntime {
     picked: PickMap,
     delta: number,
     eventId: string,
-  ): boolean {
+  ): boolean | null {
     const p = instruction.parameters;
     const ctx = this.ctx(picked, delta);
 
@@ -605,8 +665,8 @@ export class GameRuntime {
         return this.filterObjects(picked, p["object"] ?? "", (o) => !!o.tweens[name]?.done);
       }
       default:
-        // Unknown instructions are permissive, like the "unsupported" chip in the sheet.
-        return true;
+        this.reportUnsupportedInstruction("condition", instruction, eventId);
+        return null;
     }
   }
 
@@ -647,7 +707,7 @@ export class GameRuntime {
 
   // ----------------------------------------------------------------- actions
 
-  private runAction(instruction: GDInstruction, picked: PickMap, delta: number) {
+  private runAction(instruction: GDInstruction, picked: PickMap, delta: number, eventId: string) {
     const p = instruction.parameters;
     const ctx = this.ctx(picked, delta);
     const targets = () => this.targetsOf(picked, p["object"] ?? "");
@@ -799,8 +859,10 @@ export class GameRuntime {
             object.animationName = animation.name;
             object.timeBetweenFrames = animation.timeBetweenFrames;
             object.frameIndex = 0;
-            const image = animation.images[0]?.image;
-            if (image) object.asset = image;
+            const frame = animation.images[0];
+            if (frame?.image) object.asset = frame.image;
+            if (frame?.hitBox) object.hitBox = frame.hitBox;
+            else delete object.hitBox;
           }
         }
         break;
@@ -817,8 +879,10 @@ export class GameRuntime {
             object.animationName = animation.name;
             object.timeBetweenFrames = animation.timeBetweenFrames;
             object.frameIndex = 0;
-            const image = animation.images[0]?.image;
-            if (image) object.asset = image;
+            const frame = animation.images[0];
+            if (frame?.image) object.asset = frame.image;
+            if (frame?.hitBox) object.hitBox = frame.hitBox;
+            else delete object.hitBox;
           }
         }
         break;
@@ -928,8 +992,8 @@ export class GameRuntime {
         const zoom = clamp(
           applyModOp(
             layer?.cameraZoom ?? 1,
-            p["operator"] ?? "set to",
-            evalNumber(p["factor"] ?? "1", ctx),
+            p["op"] ?? p["operator"] ?? "set to",
+            evalNumber(p["zoom"] ?? p["factor"] ?? "1", ctx),
           ),
           0.1,
           8,
@@ -1108,13 +1172,21 @@ export class GameRuntime {
         );
         this.log(`Sonido: ${p["file"] ?? ""}`);
         break;
-      case "PlaySoundAtPosition":
-        this.options.onPlaySound?.(
-          p["file"] ?? "",
-          evalNumber(p["volume"] ?? "100", ctx) / 100,
-          (p["loop"] ?? "no") === "yes",
-        );
+      case "PlaySoundAtPosition": {
+        const file = p["file"] ?? "";
+        const volume = evalNumber(p["volume"] ?? "100", ctx) / 100;
+        const loop = (p["loop"] ?? "no") === "yes";
+        const x = evalNumber(p["x"] ?? "0", ctx);
+        const y = evalNumber(p["y"] ?? "0", ctx);
+        const stereoAdjustment = evalNumber(p["adjustation"] ?? "60", ctx);
+        if (this.options.onPlaySoundAtPosition) {
+          this.options.onPlaySoundAtPosition(file, volume, loop, x, y, stereoAdjustment);
+        } else {
+          this.options.onPlaySound?.(file, volume, loop);
+        }
+        this.log(`Sonido posicional: ${file} (${Math.round(x)}, ${Math.round(y)})`);
         break;
+      }
       case "StopSound":
         this.options.onStopSound?.(evalNumber(p["channel"] ?? "0", ctx));
         break;
@@ -1131,6 +1203,7 @@ export class GameRuntime {
         this.log("Fin de la escena");
         break;
       default:
+        this.reportUnsupportedInstruction("action", instruction, eventId);
         break;
     }
   }
@@ -1182,8 +1255,10 @@ export class GameRuntime {
           }
         }
       }
-      const image = animation.images[object.frameIndex]?.image;
-      if (image) object.asset = image;
+      const frame = animation.images[object.frameIndex];
+      if (frame?.image) object.asset = frame.image;
+      if (frame?.hitBox) object.hitBox = frame.hitBox;
+      else delete object.hitBox;
     }
   }
 
@@ -1321,6 +1396,46 @@ export class GameRuntime {
     return {};
   }
 
+  private reportUnsupportedInstruction(
+    kind: RuntimeInstructionKind,
+    instruction: GDInstruction,
+    eventId: string,
+  ) {
+    const key = `unsupported:${kind}:${instruction.typeId}`;
+    if (this.reportedDiagnostics.has(key)) return;
+    this.reportedDiagnostics.add(key);
+
+    const label = kind === "condition" ? "Condición" : "Acción";
+    const message = `${label} no soportada por el runtime 2D: ${instruction.typeId}`;
+    this.log(`⚠ ${message}`);
+    this.options.onDiagnostic?.({
+      code: "unsupported-instruction",
+      severity: "warning",
+      message,
+      frame: this.state.frame,
+      eventId,
+      typeId: instruction.typeId,
+      instructionId: instruction.id,
+    });
+  }
+
+  private reportInvalidExternalEventsLink(eventId: string, name: string, reason: string) {
+    const target = name || "(sin destino)";
+    const key = `external-events:${eventId}:${target}:${reason}`;
+    if (this.reportedDiagnostics.has(key)) return;
+    this.reportedDiagnostics.add(key);
+
+    const message = `No se pudo ejecutar el enlace a eventos externos ${target}: ${reason}.`;
+    this.log(`⚠ ${message}`);
+    this.options.onDiagnostic?.({
+      code: "invalid-external-events-link",
+      severity: "error",
+      message,
+      frame: this.state.frame,
+      eventId,
+    });
+  }
+
   private log(message: string) {
     this.state.logs.push({ time: this.state.time, message });
     if (this.state.logs.length > 80) this.state.logs.shift();
@@ -1367,19 +1482,97 @@ export function flattenVariables(list: GDVariable[], prefix = ""): Record<string
   return out;
 }
 
+interface CollisionPoint {
+  x: number;
+  y: number;
+}
+
 function overlaps(a: RTObject, b: RTObject, pad: number): boolean {
-  return (
-    a.x + pad < b.x + b.width - pad &&
-    a.x + a.width - pad > b.x + pad &&
-    a.y + pad < b.y + b.height - pad &&
-    a.y + a.height - pad > b.y + pad
-  );
+  const polygonA = collisionPolygon(a);
+  const polygonB = collisionPolygon(b);
+  for (const polygon of [polygonA, polygonB]) {
+    for (let index = 0; index < polygon.length; index += 1) {
+      const current = polygon[index]!;
+      const next = polygon[(index + 1) % polygon.length]!;
+      const axis = { x: -(next.y - current.y), y: next.x - current.x };
+      const length = Math.hypot(axis.x, axis.y);
+      if (length < 1e-9) continue;
+      axis.x /= length;
+      axis.y /= length;
+      const projectionA = projectPolygon(polygonA, axis);
+      const projectionB = projectPolygon(polygonB, axis);
+      if (
+        projectionA.max - pad <= projectionB.min + pad ||
+        projectionB.max - pad <= projectionA.min + pad
+      ) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+function collisionPolygon(object: RTObject): CollisionPoint[] {
+  const mask = object.hitBox;
+  const source =
+    mask?.kind === "polygon" && mask.vertices.length >= 3
+      ? mask.vertices
+      : mask
+        ? [
+            { x: mask.x, y: mask.y },
+            { x: mask.x + mask.width, y: mask.y },
+            { x: mask.x + mask.width, y: mask.y + mask.height },
+            { x: mask.x, y: mask.y + mask.height },
+          ]
+        : [
+            { x: 0, y: 0 },
+            { x: object.width, y: 0 },
+            { x: object.width, y: object.height },
+            { x: 0, y: object.height },
+          ];
+  const referenceWidth = Math.max(1, mask?.referenceWidth ?? object.width);
+  const referenceHeight = Math.max(1, mask?.referenceHeight ?? object.height);
+  const centerX = object.x + object.width / 2;
+  const centerY = object.y + object.height / 2;
+  const radians = (object.angle * Math.PI) / 180;
+  const cosine = Math.cos(radians);
+  const sine = Math.sin(radians);
+
+  return source.map((point) => {
+    let localX = (point.x / referenceWidth) * object.width;
+    let localY = (point.y / referenceHeight) * object.height;
+    if (object.flipX) localX = object.width - localX;
+    if (object.flipY) localY = object.height - localY;
+    const dx = localX - object.width / 2;
+    const dy = localY - object.height / 2;
+    return {
+      x: centerX + dx * cosine - dy * sine,
+      y: centerY + dx * sine + dy * cosine,
+    };
+  });
+}
+
+function projectPolygon(points: readonly CollisionPoint[], axis: CollisionPoint) {
+  let min = Number.POSITIVE_INFINITY;
+  let max = Number.NEGATIVE_INFINITY;
+  for (const point of points) {
+    const value = point.x * axis.x + point.y * axis.y;
+    min = Math.min(min, value);
+    max = Math.max(max, value);
+  }
+  return { min, max };
 }
 
 function pointInObject(object: RTObject, x: number, y: number): boolean {
-  return (
-    x >= object.x && x <= object.x + object.width && y >= object.y && y <= object.y + object.height
-  );
+  const polygon = collisionPolygon(object);
+  let inside = false;
+  for (let index = 0, previous = polygon.length - 1; index < polygon.length; previous = index++) {
+    const a = polygon[index]!;
+    const b = polygon[previous]!;
+    const crosses = a.y > y !== b.y > y && x < ((b.x - a.x) * (y - a.y)) / (b.y - a.y || 1) + a.x;
+    if (crosses) inside = !inside;
+  }
+  return inside;
 }
 
 export function compare(left: number, operator: string, right: number): boolean {

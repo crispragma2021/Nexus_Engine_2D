@@ -87,13 +87,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "apple-mobile-web-app-title", content: "Nexus Engine" },
       {
         name: "description",
-        content: "Nexus Engine: el 2D/3D Game Engine para crear, aprender y publicar juegos.",
+        content: "Nexus Engine: el motor de juegos 2D para crear, aprender y publicar juegos.",
       },
       { name: "author", content: "Nexus Engine" },
       { property: "og:title", content: "Nexus Engine" },
       {
         property: "og:description",
-        content: "Nexus Engine: el 2D/3D Game Engine para crear, aprender y publicar juegos.",
+        content: "Nexus Engine: el motor de juegos 2D para crear, aprender y publicar juegos.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

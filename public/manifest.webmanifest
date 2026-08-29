@@ -2,7 +2,7 @@
   "id": "/",
   "name": "Nexus Engine",
   "short_name": "Nexus",
-  "description": "El 2D/3D Game Engine para crear, aprender y publicar juegos.",
+  "description": "El motor de juegos 2D para crear, aprender y publicar juegos.",
   "lang": "es",
   "dir": "ltr",
   "start_url": "/",

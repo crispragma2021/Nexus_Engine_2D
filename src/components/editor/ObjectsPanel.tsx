@@ -221,9 +221,10 @@ function ObjectRow({
 }
 
 function ObjectGlyph({ object }: { object: GDObjectDef }) {
+  const { project } = useEditor();
   const animation = object.animations?.[0];
   const image = animation?.images?.[0]?.image ?? object.asset;
-  const url = resolveAsset(image);
+  const url = resolveAsset(image, project.resources);
   if (isTextLike(object.type)) return <Type className="h-4 w-4 shrink-0 text-[#8AD6FF]" />;
   if (url) {
     return (

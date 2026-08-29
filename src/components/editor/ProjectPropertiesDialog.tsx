@@ -3,7 +3,7 @@
 // global variables). Tabs match the real app's sidebar.
 
 import * as React from "react";
-import { Boxes, Image as ImageIcon, Plus, Puzzle, Variable } from "lucide-react";
+import { Boxes, Image as ImageIcon, Plus, Puzzle, Upload, Variable, Volume2 } from "lucide-react";
 import { useEditor, type VariableScopeLocation } from "@/lib/editor/store";
 import { INSTALLED_EXTENSIONS, RESOURCE_KINDS, resolveAsset } from "@/lib/editor/catalog";
 import { S } from "@/lib/editor/i18n";
@@ -23,6 +23,16 @@ import {
 } from "./gd/kit";
 import { VariablesEditor, type VariablesApi } from "./gd/VariablesEditor";
 import { CatalogIcon } from "./gd/icons";
+import { toast } from "sonner";
+import {
+  parseSfxrMetadata,
+  playSfxr,
+  serializeSfxrMetadata,
+  sfxrToDataUrl,
+  SFXR_PRESETS,
+  type SfxrParameters,
+  type SfxrPresetName,
+} from "@/lib/audio/sfxr";
 
 type Tab = "game" | "resources" | "extensions" | "variables";
 
@@ -274,16 +284,96 @@ function ResourcesTab() {
   const { project, dispatch } = useEditor();
   const [query, setQuery] = React.useState("");
   const [kind, setKind] = React.useState<string>("all");
+  const [selectedName, setSelectedName] = React.useState<string | null>(null);
+  const imageInput = React.useRef<HTMLInputElement>(null);
+  const audioInput = React.useRef<HTMLInputElement>(null);
   const rows = project.resources.filter(
     (resource) =>
       (kind === "all" || resource.kind === kind) &&
       (!query || resource.name.toLowerCase().includes(query.toLowerCase())),
   );
+  const selected = project.resources.find((resource) => resource.name === selectedName);
 
   const add = (next: GDResource) => dispatch({ type: "addResource", resource: next });
+  const importFiles = async (files: FileList | null, resourceKind: "image" | "audio") => {
+    if (!files) return;
+    const claimedNames = new Set(project.resources.map((resource) => resource.name));
+    for (const file of Array.from(files)) {
+      try {
+        validateImportedFile(file, resourceKind);
+        const name = uniqueResourceName(file.name, [...claimedNames]);
+        claimedNames.add(name);
+        add({
+          name,
+          kind: resourceKind,
+          file: name,
+          url: await fileToDataUrl(file),
+          alwaysLoaded: true,
+          size: Math.max(0.01, file.size / 1024),
+          editorMetadata: { source: "manual" },
+        });
+        setSelectedName(name);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "No se pudo importar el archivo.");
+      }
+    }
+  };
+  const addPreset = (preset: SfxrPresetName) => {
+    const parameters = { ...SFXR_PRESETS[preset] };
+    const name = uniqueResourceName(
+      `${preset}.wav`,
+      project.resources.map((resource) => resource.name),
+    );
+    add({
+      name,
+      kind: "audio",
+      file: name,
+      url: sfxrToDataUrl(parameters),
+      metadata: serializeSfxrMetadata(parameters, preset),
+      editorMetadata: {
+        source: "procedural",
+        generation: {
+          provider: "procedural",
+          model: "sfxr",
+          generatedAt: new Date().toISOString(),
+        },
+        sfx: { ...parameters },
+      },
+      alwaysLoaded: true,
+    });
+    setKind("audio");
+    setSelectedName(name);
+    try {
+      playSfxr(parameters);
+    } catch {
+      // Creating the standard WAV resource must still work when Web Audio is unavailable.
+    }
+  };
 
   return (
     <div>
+      <input
+        ref={imageInput}
+        type="file"
+        accept=".png,.jpg,.jpeg,.svg,image/png,image/jpeg,image/svg+xml"
+        multiple
+        className="hidden"
+        onChange={(event) => {
+          void importFiles(event.target.files, "image");
+          event.target.value = "";
+        }}
+      />
+      <input
+        ref={audioInput}
+        type="file"
+        accept=".wav,.mp3,.ogg,audio/wav,audio/mpeg,audio/ogg"
+        multiple
+        className="hidden"
+        onChange={(event) => {
+          void importFiles(event.target.files, "audio");
+          event.target.value = "";
+        }}
+      />
       <div className="flex flex-wrap items-center gap-2 pb-2">
         <SearchBar
           value={query}
@@ -292,6 +382,24 @@ function ResourcesTab() {
           className="min-w-40 flex-1"
         />
         <div className="flex shrink-0 gap-1">
+          <button
+            type="button"
+            onClick={() => imageInput.current?.click()}
+            className="flex h-8 items-center gap-1 rounded bg-primary px-2 text-[11.5px] font-medium text-primary-foreground hover:bg-[#5C36D6]"
+            title="Importar PNG, JPG o SVG"
+          >
+            <Upload className="h-3.5 w-3.5" />
+            Imagen
+          </button>
+          <button
+            type="button"
+            onClick={() => audioInput.current?.click()}
+            className="flex h-8 items-center gap-1 rounded bg-primary px-2 text-[11.5px] font-medium text-primary-foreground hover:bg-[#5C36D6]"
+            title="Importar WAV, MP3 u OGG"
+          >
+            <Volume2 className="h-3.5 w-3.5" />
+            Audio
+          </button>
           {RESOURCE_KINDS.map((entry) => (
             <button
               key={entry.kind}
@@ -313,6 +421,23 @@ function ResourcesTab() {
             </button>
           ))}
         </div>
+      </div>
+
+      <div className="mb-2 flex flex-wrap items-center gap-1 rounded border border-separator bg-[#1D1D26] p-1.5 text-[11.5px]">
+        <span className="mr-1 text-text-secondary">SFX instantáneo:</span>
+        {(Object.keys(SFXR_PRESETS) as SfxrPresetName[]).map((preset) => (
+          <button
+            key={preset}
+            type="button"
+            onClick={() => addPreset(preset)}
+            className="rounded bg-elevated px-2 py-1 capitalize text-foreground hover:bg-selection"
+          >
+            {preset}
+          </button>
+        ))}
+        <span className="ml-auto text-[10.5px] text-text-placeholder">
+          WAV editable · frecuencia, ataque, caída, sustain, salto tonal y distorsión
+        </span>
       </div>
 
       <div className="flex gap-1 pb-2 text-[11.5px]">
@@ -349,12 +474,22 @@ function ResourcesTab() {
           </thead>
           <tbody>
             {rows.map((resource, index) => (
-              <tr key={resource.name} className={index % 2 === 0 ? "bg-[#1D1D26]" : "bg-[#23232A]"}>
+              <tr
+                key={resource.name}
+                onClick={() => setSelectedName(resource.name)}
+                className={cn(
+                  "cursor-pointer",
+                  index % 2 === 0 ? "bg-[#1D1D26]" : "bg-[#23232A]",
+                  selectedName === resource.name &&
+                    "outline outline-1 -outline-offset-1 outline-[#4AB0E4]",
+                )}
+              >
                 <td className="px-2 py-1">
                   <span className="grid h-6 w-6 place-items-center rounded bg-[#101017]">
-                    {resource.kind === "image" && resolveAsset(resource.file || resource.name) ? (
+                    {resource.kind === "image" &&
+                    resolveAsset(resource.file || resource.name, project.resources) ? (
                       <img
-                        src={resolveAsset(resource.file || resource.name)}
+                        src={resolveAsset(resource.file || resource.name, project.resources)}
                         alt=""
                         className="h-5 w-5 object-contain [image-rendering:pixelated]"
                       />
@@ -366,13 +501,24 @@ function ResourcesTab() {
                 <td className="truncate px-2 py-1 text-foreground">
                   <input
                     value={resource.name}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const name = event.target.value;
+                      if (
+                        !name.trim() ||
+                        project.resources.some(
+                          (candidate) =>
+                            candidate.name !== resource.name && candidate.name === name.trim(),
+                        )
+                      ) {
+                        return;
+                      }
                       dispatch({
                         type: "updateResource",
                         name: resource.name,
-                        patch: { name: event.target.value },
-                      })
-                    }
+                        patch: { name },
+                      });
+                      setSelectedName(name.trim());
+                    }}
                     className="h-6 w-full rounded border border-transparent bg-transparent px-1 outline-none hover:border-separator focus:border-[var(--brand-light)]"
                   />
                 </td>
@@ -427,8 +573,210 @@ function ResourcesTab() {
           </tbody>
         </table>
       </div>
+
+      {selected ? (
+        <ResourceInspector
+          key={selected.name}
+          resource={selected}
+          onUpdate={(patch) => dispatch({ type: "updateResource", name: selected.name, patch })}
+        />
+      ) : null}
     </div>
   );
+}
+
+function ResourceInspector({
+  resource,
+  onUpdate,
+}: {
+  resource: GDResource;
+  onUpdate: (patch: Partial<GDResource>) => void;
+}) {
+  const parsed = parseSfxrMetadata(resource.metadata);
+  const [parameters, setParameters] = React.useState<SfxrParameters | null>(parsed);
+  const provenance = resource.editorMetadata?.source ?? "manual";
+
+  const setNumber = (key: Exclude<keyof SfxrParameters, "waveform">, value: number) => {
+    if (!parameters) return;
+    setParameters({ ...parameters, [key]: value });
+  };
+  const save = () => {
+    if (!parameters) return;
+    onUpdate({
+      url: sfxrToDataUrl(parameters),
+      metadata: serializeSfxrMetadata(parameters),
+      editorMetadata: {
+        source: "procedural",
+        generation: resource.editorMetadata?.generation ?? {
+          provider: "procedural",
+          model: "sfxr",
+        },
+        sfx: { ...parameters },
+      },
+    });
+    toast.success(`SFX «${resource.name}» actualizado como WAV estándar.`);
+  };
+
+  return (
+    <div className="mt-2 rounded border border-separator bg-[#1D1D26] p-2">
+      <div className="flex flex-wrap items-center gap-2 text-[11.5px]">
+        <strong className="text-foreground">Inspector: {resource.name}</strong>
+        <span className="rounded bg-elevated px-1.5 py-0.5 text-text-secondary">
+          {provenance === "manual"
+            ? "Importado manualmente"
+            : provenance === "generated"
+              ? "Generado con IA"
+              : "Generado proceduralmente"}
+        </span>
+        {resource.size ? (
+          <span className="text-text-placeholder">{resource.size.toFixed(1)} KB</span>
+        ) : null}
+      </div>
+
+      {resource.editorMetadata?.generation ? (
+        <div className="mt-2 grid gap-1 rounded border border-separator p-1.5 text-[10.5px] text-text-secondary sm:grid-cols-2">
+          <span>
+            Proveedor:{" "}
+            <strong className="text-foreground">
+              {resource.editorMetadata.generation.provider}
+            </strong>
+          </span>
+          <span>
+            Modelo:{" "}
+            <strong className="text-foreground">
+              {resource.editorMetadata.generation.model ?? "—"}
+            </strong>
+          </span>
+          {resource.editorMetadata.generation.prompt ? (
+            <label className="sm:col-span-2">
+              Instrucción de origen
+              <input
+                value={resource.editorMetadata.generation.prompt}
+                onChange={(event) =>
+                  onUpdate({
+                    editorMetadata: {
+                      ...resource.editorMetadata!,
+                      generation: {
+                        ...resource.editorMetadata!.generation!,
+                        prompt: event.target.value,
+                      },
+                    },
+                  })
+                }
+                className="mt-0.5 h-7 w-full rounded border border-separator bg-[#101017] px-2 text-foreground outline-none focus:border-[var(--brand-light)]"
+              />
+            </label>
+          ) : null}
+        </div>
+      ) : null}
+
+      {parameters ? (
+        <div className="mt-2">
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            <label className="text-[11px] text-text-secondary">
+              Forma de onda
+              <select
+                value={parameters.waveform}
+                onChange={(event) =>
+                  setParameters({
+                    ...parameters,
+                    waveform: event.target.value as SfxrParameters["waveform"],
+                  })
+                }
+                className="mt-0.5 h-7 w-full rounded border border-separator bg-[#25252E] px-1 text-foreground"
+              >
+                <option value="square">Cuadrada</option>
+                <option value="saw">Sierra</option>
+                <option value="sine">Seno</option>
+                <option value="noise">Ruido</option>
+              </select>
+            </label>
+            {(
+              [
+                ["frequency", "Frecuencia (Hz)", 20, 8000, 1],
+                ["attack", "Ataque (s)", 0, 2, 0.001],
+                ["decay", "Caída (s)", 0.005, 4, 0.005],
+                ["sustain", "Sustain (s)", 0, 4, 0.005],
+                ["pitchJump", "Salto tonal (semitonos)", -60, 60, 1],
+                ["distortion", "Distorsión", 0, 1, 0.01],
+              ] as const
+            ).map(([key, label, min, max, step]) => (
+              <label key={key} className="text-[11px] text-text-secondary">
+                {label}
+                <input
+                  type="number"
+                  value={parameters[key]}
+                  min={min}
+                  max={max}
+                  step={step}
+                  onChange={(event) => setNumber(key, Number(event.target.value))}
+                  className="mt-0.5 h-7 w-full rounded border border-separator bg-[#25252E] px-1 text-foreground outline-none focus:border-[var(--brand-light)]"
+                />
+              </label>
+            ))}
+          </div>
+          <div className="mt-2 flex justify-end gap-1">
+            <GdButton
+              size="small"
+              onClick={() => {
+                try {
+                  playSfxr(parameters);
+                } catch (error) {
+                  toast.error(
+                    error instanceof Error ? error.message : "No se pudo reproducir el SFX.",
+                  );
+                }
+              }}
+            >
+              Probar
+            </GdButton>
+            <GdButton size="small" variant="raised" primary onClick={save}>
+              Aplicar parámetros
+            </GdButton>
+          </div>
+        </div>
+      ) : (
+        <p className="mt-1 text-[11px] text-text-secondary">
+          Recurso estándar editable. Puedes cambiar su nombre, archivo y precarga arriba o
+          reemplazarlo mediante los controles de importación manual.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function validateImportedFile(file: File, kind: "image" | "audio") {
+  const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
+  const allowed = kind === "image" ? ["png", "jpg", "jpeg", "svg"] : ["wav", "mp3", "ogg"];
+  if (!allowed.includes(extension)) {
+    throw new Error(
+      kind === "image"
+        ? "Formato no admitido. Usa PNG, JPG o SVG."
+        : "Formato no admitido. Usa WAV, MP3 u OGG.",
+    );
+  }
+  if (file.size <= 0 || file.size > 20 * 1024 * 1024) {
+    throw new Error("El recurso debe tener contenido y no superar 20 MB.");
+  }
+}
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error(`No se pudo leer ${file.name}.`));
+    reader.readAsDataURL(file);
+  });
+}
+
+function uniqueResourceName(base: string, taken: readonly string[]): string {
+  if (!taken.includes(base)) return base;
+  const dot = base.lastIndexOf(".");
+  const stem = dot > 0 ? base.slice(0, dot) : base;
+  const extension = dot > 0 ? base.slice(dot) : "";
+  let index = 2;
+  while (taken.includes(`${stem}-${index}${extension}`)) index += 1;
+  return `${stem}-${index}${extension}`;
 }
 
 function ExtensionsTab() {

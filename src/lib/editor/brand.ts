@@ -7,7 +7,7 @@
 export const BRAND = {
   name: "Nexus Engine",
   legalName: "Nexus Engine Studio",
-  tagline: "2D/3D Game Engine para crear y publicar juegos",
+  tagline: "Motor de juegos 2D para crear y publicar",
   /** Same purple ramp GDevelop uses, kept as a token so it can be re-skinned. */
   accent: "#7046EC",
   accentDark: "#4F28CD",

@@ -521,7 +521,6 @@ export const INSTRUCTIONS: InstructionDef[] = [
     description: "Multiplica la velocidad de reproducción de la animación.",
     sentence: "Cambiar la velocidad de la animación de {0} a {1}%",
     parameters: [OBJ(), P("speed", "expression", "Velocidad (%)", "100")],
-    unsupported: true,
   },
   {
     id: "PosX",
@@ -700,7 +699,6 @@ export const INSTRUCTIONS: InstructionDef[] = [
       P("op", "modop", "Modificación", "add"),
       P("zero", "number", "", "0"),
     ],
-    unsupported: true,
   },
   {
     id: "ModVarInstance",
@@ -775,7 +773,15 @@ export const INSTRUCTIONS: InstructionDef[] = [
     description: "Congela el temporizador hasta que se reactive.",
     sentence: "Pausar el temporizador de escena {0}",
     parameters: [P("timer", "string", "Temporizador", "spawn")],
-    unsupported: true,
+  },
+  {
+    id: "UnpauseTimer",
+    kind: "action",
+    category: "timers",
+    name: "Reanudar un temporizador de escena",
+    description: "Continúa un temporizador que estaba pausado.",
+    sentence: "Reanudar el temporizador de escena {0}",
+    parameters: [P("timer", "string", "Temporizador", "spawn")],
   },
   {
     id: "ValueOfTimer",
@@ -824,7 +830,6 @@ export const INSTRUCTIONS: InstructionDef[] = [
       P("zoom", "expression", "Nuevo zoom de la cámara", "2"),
       P("layer", "layer", "Capa", "Base layer"),
     ],
-    unsupported: true,
   },
 
   /* ---------------------------------------------------------------- Capas */
@@ -858,7 +863,6 @@ export const INSTRUCTIONS: InstructionDef[] = [
       P("op", "modop", "Modificación", "set to"),
       P("value", "expression", "Opacidad", "255"),
     ],
-    unsupported: true,
   },
 
   /* ---------------------------------------------------------------- Audio */
@@ -890,7 +894,6 @@ export const INSTRUCTIONS: InstructionDef[] = [
       P("loop", "yesno", "Bucle", "no"),
       P("adjustation", "expression", "Ajuste estéreo", "60"),
     ],
-    unsupported: true,
   },
   {
     id: "StopSound",
@@ -900,7 +903,6 @@ export const INSTRUCTIONS: InstructionDef[] = [
     description: "Detiene el audio que se está reproduciendo en el canal indicado.",
     sentence: "Parar el canal de sonido {0}",
     parameters: [P("channel", "number", "Canal", "0")],
-    unsupported: true,
   },
 
   /* ----------------------------------------------------------- Plataformas */
@@ -1213,7 +1215,6 @@ export const EVENT_TYPES: InstructionDef[] = [
     sentence: "Enlace a {0}",
     parameters: [P("link", "string", "Eventos externos", "Sistema de puntuación")],
     isEvent: true,
-    unsupported: true,
   },
   {
     id: "BuiltinCommonInstructions::Async",

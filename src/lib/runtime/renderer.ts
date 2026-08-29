@@ -119,7 +119,31 @@ export function renderScene(
       ctx.globalAlpha = 0.75;
       ctx.strokeStyle = "#FF85ED";
       ctx.lineWidth = 1;
-      ctx.strokeRect(-viewW / 2, -viewH / 2, viewW, viewH);
+      const mask = object.hitBox;
+      if (mask) {
+        const referenceWidth = Math.max(1, mask.referenceWidth ?? object.width);
+        const referenceHeight = Math.max(1, mask.referenceHeight ?? object.height);
+        const sourcePoints =
+          mask.kind === "polygon" && mask.vertices.length >= 3
+            ? mask.vertices
+            : [
+                { x: mask.x, y: mask.y },
+                { x: mask.x + mask.width, y: mask.y },
+                { x: mask.x + mask.width, y: mask.y + mask.height },
+                { x: mask.x, y: mask.y + mask.height },
+              ];
+        ctx.beginPath();
+        sourcePoints.forEach((point, index) => {
+          const x = (point.x / referenceWidth) * viewW - viewW / 2;
+          const y = (point.y / referenceHeight) * viewH - viewH / 2;
+          if (index === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.closePath();
+        ctx.stroke();
+      } else {
+        ctx.strokeRect(-viewW / 2, -viewH / 2, viewW, viewH);
+      }
     }
     ctx.restore();
   }

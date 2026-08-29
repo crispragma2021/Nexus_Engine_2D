@@ -5,7 +5,6 @@
 import {
   Accessibility,
   Anchor,
-  Boxes,
   Brush,
   Camera,
   Clapperboard,
@@ -54,7 +53,6 @@ const MAP: Record<string, LucideIcon> = {
   particles: Sparkles,
   tilemap: Grid2x2,
   video: Video,
-  model3d: Boxes,
   spine: Spline,
   custom: Puzzle,
   image: ImageIcon,
@@ -106,7 +104,6 @@ export function iconForObjectType(type: string): string {
   if (type.includes("Particle")) return "particles";
   if (type.includes("TileMap") || type.includes("Tilemap")) return "tilemap";
   if (type.includes("Video")) return "video";
-  if (type.includes("Model3D")) return "model3d";
   if (type.includes("Spine")) return "spine";
   return "custom";
 }

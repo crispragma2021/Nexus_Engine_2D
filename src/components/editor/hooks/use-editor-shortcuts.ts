@@ -1,6 +1,6 @@
 // Keyboard shortcuts for the editor, mirroring GDevelop's default map:
-// Ctrl+Z / Ctrl+Shift+Z, Ctrl+C / Ctrl+X / Ctrl+V, Ctrl+D, Ctrl+S, Supr,
-// arrows to nudge instances (Shift = ×10) and Esc to clear the selection.
+// Ctrl+Z / Ctrl+Shift+Z, Ctrl+C / Ctrl+X / Ctrl+V, Ctrl+D, Ctrl+S, Ctrl+K,
+// Supr, arrows to nudge instances (Shift = ×10) and Esc to clear the selection.
 
 import { useEffect } from "react";
 import { useEditor } from "@/lib/editor/store";
@@ -25,9 +25,43 @@ export function useEditorShortcuts() {
       const ctrl = event.ctrlKey || event.metaKey;
       const key = event.key;
 
+      if (ctrl && key.toLowerCase() === "k") {
+        event.preventDefault();
+        dispatch({
+          type: "ui",
+          patch: {
+            quickAutomationOpen: !ui.quickAutomationOpen,
+            inlineAi: null,
+          },
+        });
+        return;
+      }
+
+      if (ui.quickAutomationOpen) {
+        if (key === "Escape") {
+          event.preventDefault();
+          dispatch({ type: "ui", patch: { quickAutomationOpen: false } });
+        }
+        return;
+      }
+
+      if (ui.inlineAi) {
+        if (key === "Escape") {
+          event.preventDefault();
+          dispatch({ type: "closeInlineAi" });
+        }
+        return;
+      }
+
       if (ctrl && key.toLowerCase() === "s") {
         event.preventDefault();
-        void saveProjectEverywhere(project).then(() => dispatch({ type: "markSaved" }));
+        void saveProjectEverywhere(project)
+          .then(() => dispatch({ type: "markSaved" }))
+          .catch((error: unknown) => {
+            window.alert?.(
+              error instanceof Error ? error.message : "No se pudo guardar el proyecto.",
+            );
+          });
         return;
       }
       if (isTyping(event.target)) return;

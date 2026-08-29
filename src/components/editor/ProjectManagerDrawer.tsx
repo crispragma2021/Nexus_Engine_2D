@@ -316,9 +316,10 @@ export function ProjectManagerDrawer() {
                 key={resource.name}
                 className="flex items-center gap-1.5 px-2 py-1 text-[12.5px] text-muted-foreground"
               >
-                {resource.kind === "image" && resolveAsset(resource.file || resource.name) ? (
+                {resource.kind === "image" &&
+                resolveAsset(resource.file || resource.name, resources) ? (
                   <img
-                    src={resolveAsset(resource.file || resource.name)}
+                    src={resolveAsset(resource.file || resource.name, resources)}
                     alt=""
                     className="h-4 w-4 shrink-0 bg-[#1D1D26] object-contain [image-rendering:pixelated]"
                   />

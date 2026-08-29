@@ -27,7 +27,7 @@ import { GdButton, GdMenu, Panel, SearchBar, type MenuEntry } from "./gd/kit";
 import { CatalogIcon, iconForObjectType } from "./gd/icons";
 
 export function InstancesPanel() {
-  const { scene, ui, dispatch } = useEditor();
+  const { scene, ui, dispatch, project } = useEditor();
   const [query, setQuery] = React.useState("");
   const [settings, setSettings] = React.useState<{ x: number; y: number } | null>(null);
   const [rowMenu, setRowMenu] = React.useState<{
@@ -186,7 +186,10 @@ export function InstancesPanel() {
       {rows.map(({ instance }) => {
         const object = objectById(instance.objectId);
         const selected = ui.selectedInstanceIds.includes(instance.id);
-        const image = resolveAsset(object?.animations?.[0]?.images?.[0]?.image ?? object?.asset);
+        const image = resolveAsset(
+          object?.animations?.[0]?.images?.[0]?.image ?? object?.asset,
+          project.resources,
+        );
         return (
           <div
             key={instance.id}

@@ -29,6 +29,7 @@ import {
   withScene,
 } from "./scenes";
 import { newNameGenerator, uid } from "./ids";
+import { applyAiEditPlan, createAiEditPlan } from "./ai";
 
 export type EditorTab = "scene" | "events";
 
@@ -80,6 +81,16 @@ export type EditorDialog =
   | { name: "externalEvents"; eventsName: string }
   | null;
 
+export interface InlineAiSession {
+  x: number;
+  y: number;
+  sceneName: string;
+  instanceIds: string[];
+  objectIds: string[];
+  cursorPosition: { x: number; y: number } | null;
+  targetName?: string;
+}
+
 interface UIState {
   tab: EditorTab;
   dialog: EditorDialog;
@@ -112,9 +123,15 @@ interface UIState {
   showHiddenInstances: boolean;
   projectManagerOpen: boolean;
   commandPaletteOpen: boolean;
+  /** Contextual hybrid automation bar (Ctrl/Cmd+K). */
+  quickAutomationOpen: boolean;
+  inlineAi: InlineAiSession | null;
   previewOpen: boolean;
   previewWithDebugger: boolean;
   debuggerOpen: boolean;
+  /** Last Canvas pointer in viewport coordinates, used to anchor the in-situ prompt. */
+  cursorClientPosition: { x: number; y: number } | null;
+  /** Last Canvas pointer in scene coordinates, used by generated insertions. */
   cursorPosition: { x: number; y: number } | null;
 }
 
@@ -123,6 +140,8 @@ type Action =
   | { type: "ui"; patch: Partial<UIState> }
   | { type: "openDialog"; dialog: NonNullable<EditorDialog> }
   | { type: "closeDialog" }
+  | { type: "openInlineAi"; x: number; y: number }
+  | { type: "closeInlineAi" }
   | { type: "markSaved" }
   | { type: "openTab"; tab: Omit<OpenedTab, "id"> & { id?: string } }
   | { type: "closeTab"; id: string }
@@ -138,6 +157,12 @@ type Action =
   | { type: "duplicateScene"; name: string }
   | { type: "updateScene"; patch: Partial<GDScene> }
   | { type: "updateGrid"; patch: Partial<GDScene["grid"]> }
+  | {
+      type: "applyAiEdit";
+      sceneName: string;
+      scene: GDScene;
+      selectedInstanceIds?: string[];
+    }
   // objects
   | { type: "addObject"; object: Partial<GDObjectDef> & { name: string; type: string } }
   | { type: "updateObject"; id: string; patch: Partial<GDObjectDef> }
@@ -222,6 +247,7 @@ type Action =
   | { type: "addVariableChild"; location: VariableScopeLocation; path: string[] }
   // events
   | { type: "addEvent"; parentId: string | null; kind: GDEvent["kind"]; position?: number }
+  | { type: "insertGeneratedEvents"; events: GDEvent[]; position?: number }
   | { type: "deleteEvent"; id: string }
   | { type: "deleteEvents"; ids: string[] }
   | { type: "duplicateEvent"; id: string }
@@ -263,6 +289,13 @@ type Action =
     }
   // resources
   | { type: "addResource"; resource: GDResource }
+  | {
+      /** Adds generated image + normal object + optional instance as one undoable edit. */
+      type: "addGeneratedAssetBundle";
+      resource: GDResource;
+      object: GDObjectDef;
+      instance?: GDInstance;
+    }
   | { type: "updateResource"; name: string; patch: Partial<GDResource> }
   | { type: "deleteResource"; name: string }
   // extensions
@@ -316,9 +349,12 @@ const initialUI: UIState = {
   showHiddenInstances: true,
   projectManagerOpen: false,
   commandPaletteOpen: false,
+  quickAutomationOpen: false,
+  inlineAi: null,
   previewOpen: false,
   previewWithDebugger: false,
   debuggerOpen: false,
+  cursorClientPosition: null,
   cursorPosition: null,
 };
 
@@ -497,6 +533,7 @@ const MUTATING = new Set([
   "deleteVariable",
   "addVariableChild",
   "addEvent",
+  "insertGeneratedEvents",
   "deleteEvent",
   "deleteEvents",
   "duplicateEvent",
@@ -509,6 +546,7 @@ const MUTATING = new Set([
   "moveInstruction",
   "toggleInstructionInverted",
   "addResource",
+  "addGeneratedAssetBundle",
   "updateResource",
   "deleteResource",
   "installExtension",
@@ -523,6 +561,7 @@ const MUTATING = new Set([
   "deleteScene",
   "renameScene",
   "duplicateScene",
+  "applyAiEdit",
 ]);
 
 function effectsOf(target: EffectTarget, scene: GDScene): GDEffect[] | undefined {
@@ -691,6 +730,33 @@ function projectReducer(state: State, action: Action): State {
 
     case "updateGrid":
       return patchScene(state, (s) => ({ ...s, grid: { ...s.grid, ...action.patch } }));
+
+    case "applyAiEdit": {
+      if (
+        action.scene.name !== action.sceneName ||
+        !project.scenes.some((candidate) => candidate.name === action.sceneName)
+      ) {
+        return state;
+      }
+      return {
+        ...state,
+        dirty: true,
+        project: {
+          ...project,
+          scenes: project.scenes.map((candidate) =>
+            candidate.name === action.sceneName ? action.scene : candidate,
+          ),
+        },
+        ui:
+          action.selectedInstanceIds === undefined
+            ? state.ui
+            : {
+                ...state.ui,
+                selectedInstanceIds: action.selectedInstanceIds,
+                selectedObjectIds: [],
+              },
+      };
+    }
 
     /* ------------------------------------------------------------ objects */
     case "addObject": {
@@ -1295,6 +1361,29 @@ function projectReducer(state: State, action: Action): State {
       }));
     }
 
+    case "insertGeneratedEvents": {
+      if (action.events.length === 0) return state;
+      const position = Math.max(
+        0,
+        Math.min(scene.events.length, action.position ?? scene.events.length),
+      );
+      const next = patchScene(state, (s) => {
+        const events = [...s.events];
+        events.splice(position, 0, ...action.events);
+        return { ...s, events };
+      });
+      return {
+        ...next,
+        ui: {
+          ...next.ui,
+          tab: "events",
+          selectedEventIds: action.events.map((event) => event.id),
+          selectedInstanceIds: [],
+          selectedObjectIds: [],
+        },
+      };
+    }
+
     case "deleteEvent":
     case "deleteEvents": {
       // cleared below
@@ -1439,17 +1528,120 @@ function projectReducer(state: State, action: Action): State {
         },
       };
 
-    case "updateResource":
+    case "addGeneratedAssetBundle": {
+      const resourceNames = project.resources.map((resource) => resource.name);
+      const resourceName = project.resources.some(
+        (resource) => resource.name === action.resource.name,
+      )
+        ? newNameGenerator(action.resource.name, resourceNames)
+        : action.resource.name;
+      const resource = {
+        ...action.resource,
+        name: resourceName,
+        file:
+          action.resource.file === action.resource.name || !action.resource.file
+            ? resourceName
+            : action.resource.file,
+      };
+      const objectName = scene.objects.some((object) => object.name === action.object.name)
+        ? newNameGenerator(
+            action.object.name,
+            scene.objects.map((object) => object.name),
+          )
+        : action.object.name;
+      const objectId = scene.objects.some((object) => object.id === action.object.id)
+        ? uid("obj")
+        : action.object.id;
+      const rewriteResource = (name: string) =>
+        name === action.resource.name || name === action.resource.file ? resourceName : name;
+      const object: GDObjectDef = {
+        ...action.object,
+        id: objectId,
+        name: objectName,
+        ...(action.object.asset ? { asset: rewriteResource(action.object.asset) } : {}),
+        ...(action.object.animations
+          ? {
+              animations: action.object.animations.map((animation) => ({
+                ...animation,
+                images: animation.images.map((frame) => ({
+                  ...frame,
+                  image: rewriteResource(frame.image),
+                })),
+              })),
+            }
+          : {}),
+      };
+      const instance = action.instance
+        ? {
+            ...action.instance,
+            id: scene.instances.some((candidate) => candidate.id === action.instance!.id)
+              ? uid("inst")
+              : action.instance.id,
+            objectId,
+          }
+        : undefined;
+      const nextProject = withScene(
+        { ...project, resources: [...project.resources, resource] },
+        state.activeSceneName,
+        (current) => ({
+          ...current,
+          objects: [...current.objects, object],
+          instances: instance ? [...current.instances, instance] : current.instances,
+        }),
+      );
       return {
         ...state,
         dirty: true,
-        project: {
-          ...project,
-          resources: project.resources.map((r) =>
-            r.name === action.name ? { ...r, ...action.patch } : r,
-          ),
+        project: nextProject,
+        ui: {
+          ...state.ui,
+          selectedObjectIds: instance ? [] : [objectId],
+          selectedInstanceIds: instance ? [instance.id] : [],
         },
       };
+    }
+
+    case "updateResource": {
+      const current = project.resources.find((resource) => resource.name === action.name);
+      if (!current) return state;
+      const nextName = action.patch.name?.trim() || current.name;
+      if (
+        nextName !== current.name &&
+        project.resources.some((resource) => resource.name === nextName)
+      ) {
+        return state;
+      }
+      const nextFile =
+        action.patch.file ?? (current.file === current.name ? nextName : current.file);
+      const resources = project.resources.map((resource) =>
+        resource.name === action.name
+          ? { ...resource, ...action.patch, name: nextName, file: nextFile }
+          : resource,
+      );
+      const scenes = project.scenes.map((entry) => ({
+        ...entry,
+        objects: entry.objects.map((object) => ({
+          ...object,
+          ...(object.asset === current.name ? { asset: nextName } : {}),
+          ...(object.animations
+            ? {
+                animations: object.animations.map((animation) => ({
+                  ...animation,
+                  images: animation.images.map((frame) =>
+                    frame.image === current.name ? { ...frame, image: nextName } : frame,
+                  ),
+                })),
+              }
+            : {}),
+        })),
+        events: entry.events.map((event) => renameResourceInEvent(event, current.name, nextName)),
+      }));
+      return {
+        ...state,
+        dirty: true,
+        project: { ...project, resources, scenes },
+      };
+    }
 
     case "deleteResource":
       return {
@@ -1583,6 +1775,23 @@ function withEffects(
   };
 }
 
+function renameResourceInEvent(event: GDEvent, from: string, to: string): GDEvent {
+  const fix = (list: GDInstruction[]) =>
+    list.map((instruction) => ({
+      ...instruction,
+      parameters:
+        instruction.parameters["file"] === from
+          ? { ...instruction.parameters, file: to }
+          : instruction.parameters,
+    }));
+  return {
+    ...event,
+    conditions: fix(event.conditions),
+    actions: fix(event.actions),
+    subEvents: event.subEvents.map((child) => renameResourceInEvent(child, from, to)),
+  };
+}
+
 function renameObjectInEvent(event: GDEvent, from: string, to: string): GDEvent {
   const fix = (list: GDInstruction[]) =>
     list.map((i) => {
@@ -1622,13 +1831,88 @@ function reducer(state: State, action: Action): State {
       return { ...state, ui: { ...state.ui, ...action.patch } };
 
     case "openDialog":
-      return { ...state, ui: { ...state.ui, dialog: action.dialog } };
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          dialog: action.dialog,
+          inlineAi: null,
+          quickAutomationOpen: false,
+        },
+      };
 
     case "closeDialog":
       return { ...state, ui: { ...state.ui, dialog: null } };
 
+    case "openInlineAi": {
+      const scene =
+        state.project.scenes.find((candidate) => candidate.name === state.activeSceneName) ??
+        state.project.scenes[0];
+      if (!scene) return state;
+      const instanceIds = state.ui.selectedInstanceIds.filter((id) =>
+        scene.instances.some((instance) => instance.id === id),
+      );
+      const objectIds = [
+        ...new Set(
+          instanceIds.length > 0
+            ? instanceIds
+                .map((id) => scene.instances.find((instance) => instance.id === id)?.objectId)
+                .filter((id): id is string => Boolean(id))
+            : state.ui.selectedObjectIds.filter((id) =>
+                scene.objects.some((object) => object.id === id),
+              ),
+        ),
+      ];
+      const objects = objectIds
+        .map((id) => scene.objects.find((object) => object.id === id))
+        .filter((object): object is GDObjectDef => Boolean(object));
+      const targetName =
+        instanceIds.length === 1 && objects.length === 1
+          ? objects[0]!.name
+          : instanceIds.length > 1 && objects.length === 1
+            ? `${objects[0]!.name} (${instanceIds.length} instancias)`
+            : instanceIds.length > 0
+              ? `${instanceIds.length} instancias`
+              : objects.length === 1
+                ? objects[0]!.name
+                : objects.length > 1
+                  ? `${objects.length} objetos`
+                  : undefined;
+      const inlineAi: InlineAiSession = {
+        x: action.x,
+        y: action.y,
+        sceneName: scene.name,
+        instanceIds,
+        objectIds,
+        cursorPosition: state.ui.cursorPosition ? { ...state.ui.cursorPosition } : null,
+        ...(targetName ? { targetName } : {}),
+      };
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          inlineAi,
+          commandPaletteOpen: false,
+          quickAutomationOpen: false,
+        },
+      };
+    }
+
+    case "closeInlineAi":
+      return { ...state, ui: { ...state.ui, inlineAi: null } };
+
     case "markSaved":
       return { ...state, dirty: false };
+
+    case "selectInstances":
+      return {
+        ...state,
+        ui: {
+          ...state.ui,
+          selectedInstanceIds: action.ids,
+          ...(action.ids.length > 0 ? { selectedObjectIds: [] } : {}),
+        },
+      };
 
     case "selectEvents":
       return { ...state, ui: { ...state.ui, selectedEventIds: action.ids } };
@@ -1753,6 +2037,7 @@ interface Ctx {
   activeTabKind: OpenedTabKind;
   ui: UIState;
   dispatch: React.Dispatch<Action>;
+  applyInlineAiPrompt: (prompt: string, targetName?: string) => Promise<string>;
   canUndo: boolean;
   canRedo: boolean;
   dirty: boolean;
@@ -1782,6 +2067,38 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const activeTab = state.ui.openedTabs.find((tab) => tab.id === state.ui.activeTabId);
+  const applyInlineAiPrompt = React.useCallback(
+    async (prompt: string, targetName?: string) => {
+      const session = state.ui.inlineAi;
+      if (!session) throw new Error("El editor in-situ de IA ya no está abierto.");
+      if (targetName !== session.targetName) {
+        throw new Error("La selección cambió mientras se preparaba la edición.");
+      }
+      const targetScene = state.project.scenes.find(
+        (candidate) => candidate.name === session.sceneName,
+      );
+      if (!targetScene) throw new Error("La escena que intentas editar ya no existe.");
+
+      const plan = createAiEditPlan(prompt, {
+        scene: targetScene,
+        selectedInstanceIds: session.instanceIds,
+        selectedObjectIds: session.objectIds,
+        cursorPosition: session.cursorPosition,
+      });
+      const applied = applyAiEditPlan(targetScene, plan);
+      dispatch({
+        type: "applyAiEdit",
+        sceneName: session.sceneName,
+        scene: applied.scene,
+        ...(applied.selectedInstanceIds !== undefined
+          ? { selectedInstanceIds: applied.selectedInstanceIds }
+          : {}),
+      });
+      return plan.summary;
+    },
+    [state],
+  );
+
   const value = React.useMemo<Ctx>(
     () => ({
       state,
@@ -1793,11 +2110,12 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
       activeTabKind: activeTab?.kind ?? "scene",
       ui: state.ui,
       dispatch,
+      applyInlineAiPrompt,
       canUndo: state.past.length > 0,
       canRedo: state.future.length > 0,
       dirty: state.dirty,
     }),
-    [state, activeTab],
+    [state, activeTab, applyInlineAiPrompt],
   );
 
   return <EditorContext.Provider value={value}>{children}</EditorContext.Provider>;

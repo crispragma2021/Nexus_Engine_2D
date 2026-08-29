@@ -18,6 +18,7 @@ import {
   Save,
   Scissors,
   Smartphone,
+  Sparkles,
   SquareStack,
   Undo2,
   ZoomIn,
@@ -53,8 +54,8 @@ export function TopToolbar() {
     try {
       await saveProjectEverywhere(project);
       dispatch({ type: "markSaved" });
-    } catch {
-      /* ignore storage failures */
+    } catch (error) {
+      window.alert?.(error instanceof Error ? error.message : "No se pudo guardar el proyecto.");
     } finally {
       setSaving(false);
     }
@@ -229,6 +230,20 @@ export function TopToolbar() {
       )}
 
       <div className="min-w-2 flex-1" />
+
+      <IconButton
+        label={`Automatización rápida (Ctrl/Cmd+K)`}
+        active={ui.quickAutomationOpen || ui.inlineAi !== null}
+        onClick={() =>
+          dispatch({
+            type: "ui",
+            patch: { quickAutomationOpen: !ui.quickAutomationOpen, inlineAi: null },
+          })
+        }
+      >
+        <Sparkles className="h-4 w-4" />
+      </IconButton>
+      <Sep />
 
       {!isEvents && !isProjectTab && (
         <>

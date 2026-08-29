@@ -1,19 +1,9 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import {
-  Plus,
-  Search,
-  SendHorizonal,
-  ArrowRight,
-  Coins,
-  ChevronLeft,
-  ChevronDown,
-  RefreshCw,
-  X,
-  Check,
-} from "lucide-react";
+import { Plus, ChevronLeft, ChevronDown, RefreshCw, X, Check } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { TEMPLATES } from "@/lib/home/data";
+import { createEmptyProject } from "@/lib/editor/scenes";
+import { saveLocalProject, setCurrentProject } from "@/lib/projects/local";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -40,30 +30,61 @@ const RESOLUTIONS: Array<{ id: ResolutionId; label: string; sub?: string; w: num
     { id: "custom", label: "Personalizar tamaño", w: 800, h: 600 },
   ];
 
-const STORAGE_OPTIONS = ["Nube de Gdevelop", "No guardes este proyecto ahora"];
+type StorageMode = "device" | "session";
+
+const STORAGE_OPTIONS: Array<{ id: StorageMode; label: string }> = [
+  { id: "device", label: "En este dispositivo" },
+  { id: "session", label: "Abrir sin añadir a Mis proyectos" },
+];
 
 export function CreateGameDialog({ open, onOpenChange }: Props) {
-  const [query, setQuery] = useState("");
-  const [prompt, setPrompt] = useState("");
   const [step, setStep] = useState<"pick" | "config">("pick");
   const [resolution, setResolution] = useState<ResolutionId>("landscape");
   const [customW, setCustomW] = useState("800");
   const [customH, setCustomH] = useState("600");
   const [projectName, setProjectName] = useState(randomName);
-  const [storage, setStorage] = useState(STORAGE_OPTIONS[1]);
+  const [storage, setStorage] = useState<StorageMode>("device");
   const [storageOpen, setStorageOpen] = useState(false);
   const [pixelArt, setPixelArt] = useState(false);
+  const [creationError, setCreationError] = useState("");
   const navigate = useNavigate();
 
-  const list = TEMPLATES.filter((t) => t.title.toLowerCase().includes(query.toLowerCase()));
+  const storageLabel = STORAGE_OPTIONS.find((option) => option.id === storage)?.label ?? "";
 
   const openEditor = () => {
+    const preset = RESOLUTIONS.find((entry) => entry.id === resolution) ?? RESOLUTIONS[1]!;
+    const width = resolution === "custom" ? Number(customW) : preset.w;
+    const height = resolution === "custom" ? Number(customH) : preset.h;
+    const project = createEmptyProject({
+      name: projectName,
+      windowWidth: width,
+      windowHeight: height,
+      pixelArt,
+    });
+
+    try {
+      if (storage === "device") {
+        const saved = saveLocalProject({ name: project.name, project });
+        setCurrentProject({ id: saved.id, project });
+      } else {
+        setCurrentProject({ id: null, project });
+      }
+    } catch (error) {
+      setCreationError(error instanceof Error ? error.message : "No se pudo crear el proyecto.");
+      return;
+    }
+
+    setCreationError("");
     onOpenChange(false);
     setStep("pick");
+    setProjectName(randomName());
     void navigate({ to: "/editor" });
   };
 
-  const goConfig = () => setStep("config");
+  const goConfig = () => {
+    setCreationError("");
+    setStep("config");
+  };
 
   if (step === "config") {
     return (
@@ -167,7 +188,7 @@ export function CreateGameDialog({ open, onOpenChange }: Props) {
                 <span className="block text-xs text-muted-foreground">
                   Dónde almacenar este proyecto
                 </span>
-                <span className="block text-lg text-foreground">{storage}</span>
+                <span className="block text-lg text-foreground">{storageLabel}</span>
               </span>
               <ChevronDown className="size-5 text-foreground" />
             </button>
@@ -181,6 +202,14 @@ export function CreateGameDialog({ open, onOpenChange }: Props) {
               />
               Optimizar para Pixel Art
             </label>
+            {creationError ? (
+              <p
+                role="alert"
+                className="mt-3 rounded border border-destructive/50 bg-destructive/10 p-2 text-sm text-destructive"
+              >
+                {creationError}
+              </p>
+            ) : null}
           </div>
 
           <div className="flex justify-end gap-3 border-t border-separator px-5 py-3">
@@ -211,10 +240,10 @@ export function CreateGameDialog({ open, onOpenChange }: Props) {
               >
                 {STORAGE_OPTIONS.map((opt, i) => (
                   <button
-                    key={opt}
+                    key={opt.id}
                     type="button"
                     onClick={() => {
-                      setStorage(opt);
+                      setStorage(opt.id);
                       setStorageOpen(false);
                     }}
                     className={cn(
@@ -222,14 +251,16 @@ export function CreateGameDialog({ open, onOpenChange }: Props) {
                       i > 0 && "border-t border-black/10",
                     )}
                   >
-                    <span className="flex-1">{opt}</span>
+                    <span className="flex-1">{opt.label}</span>
                     <span
                       className={cn(
                         "flex size-6 items-center justify-center rounded-full border-2",
-                        storage === opt ? "border-[#0B62D6]" : "border-[#1D1D26]",
+                        storage === opt.id ? "border-[#0B62D6]" : "border-[#1D1D26]",
                       )}
                     >
-                      {storage === opt && <Check className="size-3.5 stroke-[3] text-[#0B62D6]" />}
+                      {storage === opt.id && (
+                        <Check className="size-3.5 stroke-[3] text-[#0B62D6]" />
+                      )}
                     </span>
                   </button>
                 ))}
@@ -249,79 +280,22 @@ export function CreateGameDialog({ open, onOpenChange }: Props) {
         </DialogTitle>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 pb-4">
-          <div className="rounded-lg border border-[#FF8569]/60 bg-elevated p-3">
-            <p className="mb-2 text-sm font-semibold text-foreground">¿Qué te gustaría crear?</p>
-            <textarea
-              value={prompt}
-              onChange={(e) => setPrompt(e.target.value)}
-              rows={2}
-              placeholder="Comienza una plataforma simple con un jugador que puede moverse y saltar"
-              className="w-full resize-none bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
-            />
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={goConfig}
-                aria-label="Generar juego"
-                className="rounded-md bg-[#32323B] p-2 text-muted-foreground active:bg-primary active:text-primary-foreground"
-              >
-                <SendHorizonal className="size-5" />
-              </button>
-            </div>
-          </div>
-
-          <div className="mt-6 flex items-center justify-between gap-3">
-            <h3 className="text-lg font-bold text-foreground">
-              Continúa con la inteligencia humana
-            </h3>
-            <button
-              type="button"
-              className="flex shrink-0 items-center gap-2 rounded-md border border-separator px-3 py-2 text-sm font-semibold text-foreground"
-            >
-              Ver todo <ArrowRight className="size-4" />
-            </button>
+          <div className="rounded-lg border border-[#C9B6FC]/60 bg-elevated p-4">
+            <p className="text-sm font-semibold text-foreground">Proyecto 2D desde cero</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Elige la resolución y crea una escena vacía. La asistencia de IA se activa después,
+              directamente sobre el lienzo con Ctrl/Cmd + K.
+            </p>
           </div>
 
           <button
             type="button"
             onClick={goConfig}
-            className="mt-3 flex h-36 w-48 flex-col items-center justify-center gap-2 rounded-lg border border-separator text-foreground active:bg-elevated"
+            className="mt-5 flex h-36 w-48 flex-col items-center justify-center gap-2 rounded-lg border border-separator text-foreground active:bg-elevated"
           >
             <Plus className="size-7" />
-            <span className="text-base">Proyecto vacío</span>
+            <span className="text-base">Proyecto 2D vacío</span>
           </button>
-
-          <h3 className="mt-8 text-lg font-bold text-foreground">Mezcla un juego existente</h3>
-          <div className="relative mt-3">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-5 -translate-y-1/2 text-muted-foreground" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar ejemplos"
-              className="h-11 w-full rounded-md bg-elevated pl-11 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground"
-            />
-          </div>
-
-          <div className="mt-4 grid grid-cols-2 gap-4">
-            {list.map((t) => (
-              <button key={t.id} type="button" onClick={goConfig} className="text-left">
-                <span className="flex items-center gap-1.5 text-sm font-semibold text-foreground">
-                  <Coins className="size-4 text-[#FFBC57]" />
-                  {t.credits}
-                </span>
-                <span
-                  className={`mt-2 block h-28 rounded-lg bg-gradient-to-br ${t.gradient}`}
-                  aria-hidden
-                />
-                <span className="mt-2 block text-sm text-foreground">{t.title}</span>
-              </button>
-            ))}
-            {list.length === 0 && (
-              <p className="col-span-2 py-8 text-center text-sm text-muted-foreground">
-                No hay ejemplos que coincidan.
-              </p>
-            )}
-          </div>
         </div>
 
         <div className="flex justify-end border-t border-separator px-5 py-3">

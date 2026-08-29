@@ -19,7 +19,7 @@ export const S = {
   previewInNewWindow: "Una nueva ventana",
   previewNetwork: "Iniciar vista previa por red (WiFi/LAN)",
   useThisSceneForPreviews: "Usa esta escena para iniciar todas las vistas previas",
-  askAi: "Preguntar a la IA",
+  askAi: "Editar con IA in-situ",
   undo: "Deshacer",
   redo: "Rehacer",
   undoChanges: "Deshacer los últimos cambios",
