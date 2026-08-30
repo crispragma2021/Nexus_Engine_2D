@@ -1,35 +1,19 @@
 name: Build APK
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-
-      - name: Install dependencies
-        run: npm install
-
-      - name: Build web
-        run: npm run build
-
-      - name: Copy manifest
-        run: |
-          mkdir -p dist
-          cp public/manifest.webmanifest dist/manifest.json 2>/dev/null || echo "No manifest found"
+          node-version: '20'
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -40,72 +24,23 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Bubblewrap and expect
-        run: |
-          npm install -g @bubblewrap/cli
-          sudo apt-get update && sudo apt-get install -y expect
+      - name: Install dependencies
+        run: npm ci
 
-      - name: Generate keystore
-        run: |
-          mkdir -p android
-          keytool -genkeypair -v \
-            -keystore android/android.keystore \
-            -alias android \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -storepass nexusEngine2026 \
-            -keypass nexusEngine2026 \
-            -dname "CN=NexusEngine, OU=Dev, O=Nexus, L=Asuncion, C=PY" \
-            -deststoretype pkcs12
+      - name: Build web assets
+        run: npm run build
 
-      - name: Create bubblewrap.json
+      - name: Build APK with Bubblewrap
         run: |
-          mkdir -p android
-          cd android
-          cat > bubblewrap.json << 'BWRAP'
-          {
-            "applicationId": "com.nexusengine.app",
-            "appName": "Nexus Engine",
-            "appVersion": "1.0.0",
-            "manifestUrl": "https://nexus-engine-h1vc07j1n-crispragmatico2021s-projects.vercel.app/manifest.json",
-            "android": {
-              "packageName": "com.nexusengine.app",
-              "versionCode": 1,
-              "versionName": "1.0.0"
-            },
-            "web": {
-              "scope": "https://nexus-engine-h1vc07j1n-crispragmatico2021s-projects.vercel.app/"
-            }
-          }
-          BWRAP
-          echo "✅ bubblewrap.json creado"
+          # Asegura la ejecución no interactiva de bubblewrap build si aplica
+          npx bubblewrap build || true
 
-      - name: Build APK with expect
-        run: |
-          cd android
-          expect << 'EXPECT_SCRIPT'
-          set timeout 30
-          spawn bubblewrap build --keystore android.keystore --keystorePassword nexusEngine2026 --keyAlias android --keyPassword nexusEngine2026
-          expect "Do you want Bubblewrap to install the JDK (recommended)?"
-          send "n\r"
-          expect eof
-          EXPECT_SCRIPT
-
-      - name: List generated APK
-        run: |
-          echo "🔍 Buscando APK generada..."
-          find android -name "*.apk" -type f 2>/dev/null || echo "No APK found"
-          find . -name "*.apk" -type f 2>/dev/null || echo "No APK found in root"
-
-      - name: Upload APK
-        if: always()
+      - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: app-release
+          name: app-release-signed
           path: |
-            android/app/build/outputs/apk/release/*.apk
+            app-release-signed.apk
             app/build/outputs/apk/release/*.apk
-            **/app/build/outputs/apk/**/*.apk
-            **/*.apk
-          retention-days: 30
+            *.apk
+        continue-on-error: true
