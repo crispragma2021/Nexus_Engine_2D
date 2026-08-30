@@ -460,8 +460,8 @@ function ResourcesTab() {
         ))}
       </div>
 
-      <div className="overflow-hidden rounded border border-separator">
-        <table className="w-full table-fixed text-[12px]">
+      <div className="overflow-x-auto rounded border border-separator">
+        <table className="w-full min-w-[720px] table-fixed text-[12px]">
           <thead>
             <tr className="bg-[#25252E] text-left text-[#D6DEEC]">
               <th className="w-8 px-2 py-1" />

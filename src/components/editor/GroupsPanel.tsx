@@ -7,14 +7,25 @@ import { useEditor } from "@/lib/editor/store";
 import { S } from "@/lib/editor/i18n";
 import { cn } from "@/lib/utils";
 
-export function GroupsPanel() {
+export function GroupsPanel({
+  standalone = false,
+  onClose,
+}: {
+  standalone?: boolean | undefined;
+  onClose?: (() => void) | undefined;
+} = {}) {
   const { scene, ui, dispatch } = useEditor();
   const [open, setOpen] = React.useState(true);
   const [expanded, setExpanded] = React.useState<string | null>(null);
   const groups = scene.groups ?? [];
 
   return (
-    <div className="shrink-0 border-t border-separator bg-toolbar">
+    <div
+      className={cn(
+        "border-separator bg-toolbar",
+        standalone ? "flex min-h-0 flex-1 flex-col" : "shrink-0 border-t",
+      )}
+    >
       <div className="flex items-center gap-1 px-2 py-1.5">
         <button
           type="button"
@@ -37,10 +48,20 @@ export function GroupsPanel() {
         >
           <Plus className="h-3.5 w-3.5" />
         </button>
+        {onClose ? (
+          <button
+            type="button"
+            aria-label="Cerrar grupos de objetos"
+            onClick={onClose}
+            className="grid h-6 w-6 place-items-center rounded text-[14px] text-text-secondary hover:bg-elevated hover:text-foreground"
+          >
+            ×
+          </button>
+        ) : null}
       </div>
 
       {open ? (
-        <div className="pb-2">
+        <div className={cn("pb-2", standalone && "min-h-0 flex-1 overflow-y-auto")}>
           {groups.length === 0 ? (
             <p className="px-3 py-1 text-[12px] text-text-placeholder">
               Aún no hay grupos de objetos.

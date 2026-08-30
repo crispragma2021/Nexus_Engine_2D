@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, type CSSProperties } from "react";
 import { Sparkles, ArrowUp } from "lucide-react";
 import { MAX_INLINE_AI_PROMPT_LENGTH } from "@/lib/editor/ai";
 
@@ -57,8 +57,14 @@ export const InlineAiPrompt: React.FC<InlineAiPromptProps> = ({
       ref={containerRef}
       role="dialog"
       aria-label={targetName ? `Editar ${targetName} con IA` : "Editar con IA"}
-      style={{ top: y, left: x }}
-      className="fixed z-[10000] -translate-x-1/2 -translate-y-full animate-in pb-3 duration-200 fade-in zoom-in"
+      style={
+        {
+          "--inline-ai-x": `${x}px`,
+          "--inline-ai-y": `${y}px`,
+        } as CSSProperties
+      }
+      data-ai-overlay="contextual-popover"
+      className="fixed bottom-[calc(var(--mobile-editor-dock-height)+0.75rem)] left-1/2 z-[35] -translate-x-1/2 animate-in duration-200 fade-in zoom-in md:bottom-auto md:left-[var(--inline-ai-x)] md:top-[var(--inline-ai-y)] md:-translate-y-full md:pb-3"
     >
       <form
         onSubmit={handleSubmit}

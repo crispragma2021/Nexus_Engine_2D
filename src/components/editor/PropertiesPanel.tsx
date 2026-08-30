@@ -56,7 +56,7 @@ export function PropertiesPanel() {
     : undefined;
 
   const objectOfInstance = selectedInstance
-    ? scene.objects.find((o) => o.name === selectedInstance.objectId)
+    ? scene.objects.find((o) => o.id === selectedInstance.objectId)
     : undefined;
 
   const title = selectedInstance

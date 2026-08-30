@@ -87,7 +87,17 @@ function RightColumn() {
           <button
             key={entry.id}
             type="button"
-            onClick={() => dispatch({ type: "ui", patch: { rightTab: entry.id } })}
+            onClick={() =>
+              dispatch({
+                type: "ui",
+                patch: {
+                  rightTab: entry.id,
+                  showPropertiesPanel: entry.id === "properties" ? true : ui.showPropertiesPanel,
+                  showInstancesPanel: entry.id === "instances" ? true : ui.showInstancesPanel,
+                  showLayersPanel: entry.id === "layers" ? true : ui.showLayersPanel,
+                },
+              })
+            }
             className={cn(
               "flex h-7 flex-1 items-center justify-center gap-1 rounded px-1 text-[11px] font-medium",
               ui.rightTab === entry.id
@@ -101,9 +111,21 @@ function RightColumn() {
           </button>
         ))}
       </div>
-      <PropertiesPanel />
-      {ui.rightTab === "instances" && ui.showInstancesPanel ? <InstancesPanel /> : null}
-      {ui.rightTab === "layers" && ui.showLayersPanel ? <LayersPanel /> : null}
+      {ui.showPropertiesPanel ? <PropertiesPanel /> : null}
+      {ui.rightTab === "instances" && ui.showInstancesPanel ? (
+        <InstancesPanel
+          onClose={() =>
+            dispatch({ type: "ui", patch: { rightTab: "properties", showPropertiesPanel: true } })
+          }
+        />
+      ) : null}
+      {ui.rightTab === "layers" && ui.showLayersPanel ? (
+        <LayersPanel
+          onClose={() =>
+            dispatch({ type: "ui", patch: { rightTab: "properties", showPropertiesPanel: true } })
+          }
+        />
+      ) : null}
     </div>
   );
 }
@@ -195,10 +217,10 @@ function Body() {
   useEditorShortcuts();
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-window text-foreground">
+    <div className="flex h-dvh flex-col overflow-hidden bg-window text-foreground">
       <ProjectTitlebar />
       <TopToolbar />
-      <main className="flex min-h-0 flex-1">
+      <main className="flex min-h-0 flex-1 pb-[var(--mobile-editor-dock-height)] md:pb-0">
         {ui.showLeftPanel && ui.tab === "scene" ? <LeftColumn /> : <div />}
         <Workspace />
         {ui.showRightPanel ? <RightColumn /> : null}

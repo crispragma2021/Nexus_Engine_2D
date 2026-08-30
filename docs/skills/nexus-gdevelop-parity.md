@@ -12,9 +12,10 @@
    `src/lib/runtime/*` (simulación) → y sólo entonces `src/components/editor/*`.
    Ningún componente guarda estado de proyecto en `useState`: si el dato pertenece al
    proyecto, vive en el modelo y se muta con una acción del reducer.
-2. **Comparar contra la fuente real**, no contra la memoria. El árbol de referencia está en
-   `/tmp/gd/newIDE/app/src` (clone de `4ian/GDevelop`, carpeta `newIDE/app/src`), y los
-   textos oficiales en `newIDE/app/src/locales/es_ES/messages.js` y
+2. **Comparar contra la fuente real**, no contra la memoria. Clonar `4ian/GDevelop` con
+   `--depth 1 --filter=blob:none --sparse` y habilitar `newIDE/app/src`; en la auditoría del
+   29-08-2026 se usó `/tmp/gd-reference/newIDE/app/src` en el commit upstream `60d0aba`.
+   Los textos oficiales están en `newIDE/app/src/locales/es_ES/messages.js` y
    `extension-messages.js`. Antes de inventar un label o un color, buscar ahí.
 3. **Idioma = español oficial de GDevelop** (`es_ES`). Reutilizar la cadena exacta del
    catálogo traducido; si no existe, traducir con el mismo registro (tú informal, sin
@@ -141,7 +142,35 @@ Y en el navegador: tema, densidad, hover, selección y drag & drop **se ven igua
 GDevelop; la paleta no se altera; ningún botón decorativo sin acción (o se marca como
 pendiente en `docs/GAP-ANALYSIS.md`).
 
-## 4. Fuera de alcance deliberado
+## 4. Auditoría Web/Mobile de referencia (29-08-2026)
+
+Referencia inspeccionada: `4ian/GDevelop@60d0aba`. La comparación se hizo por flujo y
+responsabilidad, no copiando código Flow/PIXI dentro del editor TypeScript.
+
+| Superficie                | Fuente upstream inspeccionada                                                                                         | Implementación Nexus y resultado                                                                                                                                                                                                                                                   |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Dock móvil                | `SceneEditor/SwipeableDrawerEditorsDisplay/BottomToolbar.js`, `index.js` y `SwipeableDrawer.js`                       | `MobileBottomBar.tsx`: cinco accesos permanentes (Objetos, Grupos, Propiedades, Instancias y Capas), `nav` fijo con safe-area y Drawer redimensionable que termina **encima** del dock. Cambiar de acceso no desmonta ni desplaza el canvas.                                       |
+| Canvas infinito y ventana | `InstancesEditor/Background.js`, `WindowBorder.js`, `WindowMask.js`, `ViewPosition.js` y `InstancesEditorSettings.js` | `SceneCanvas.tsx`: fondo infinito punteado, instancias editables fuera de la ventana, máscara opcional, marco cian contrastado con etiqueta de resolución y zoom inicial/acción «Encajar».                                                                                         |
+| Gestos                    | `InstancesEditor/PinchHandler.js`, `LongTouchHandler.js` e `index.js`                                                 | `canvas-gestures.ts` + `SceneCanvas.tsx`: un puntero conserva selección/mover/redimensionar/rotar; dos punteros cancelan esa edición y realizan pan+pinch anclado al centro; el dedo restante queda inhibido hasta terminar la secuencia. También se ancla Ctrl/⌘+rueda al cursor. |
+| Árbol de eventos          | `EventsSheet/EventsTree/*`, `EventsSheet/Toolbar.js`, `InstructionEditor/*` y `SearchPanel.js`                        | `EventsEditor.tsx` + `InstructionSelectorDialog.tsx`: eventos estándar, comentarios, grupos, enlaces, else, subeventos, activar/desactivar, duplicar/eliminar, búsqueda y parámetros visuales. En móvil la fila conserva sus dos columnas mediante desplazamiento horizontal.      |
+| Capas                     | `LayersList/*` y `CompactLayerPropertiesEditor/*`                                                                     | `LayersPanel.tsx` + `PropertiesPanel.tsx`: capa activa, visibilidad, bloqueo, orden, renombrado, borrado, iluminación 2D, efectos y propiedades; panel completo tanto en escritorio como en Drawer.                                                                                |
+| Instancias                | `InstancesEditor/InstancesList/*` y `CompactInstancePropertiesEditor/*`                                               | `InstancesPanel.tsx` + `PropertiesPanel.tsx`: buscar/seleccionar, capa, orden Z, visibilidad, bloqueo, duplicar/cortar/eliminar y alta; inspector de posición, tamaño, ángulo, capa, efectos y variables. La resolución objeto-instancia usa el `id` real.                         |
+| Recursos                  | `ResourcesEditor/*`, `ResourcesList/*` y `ResourcePreview/*`                                                          | pestaña Recursos de `ProjectPropertiesDialog.tsx`: búsqueda/filtro, tabla, alta/renombrado/borrado, preview, metadatos, precarga e importación manual PNG/JPG/SVG y WAV/MP3/OGG; la tabla se desplaza en pantallas estrechas.                                                      |
+| Preview/Play              | `MainFrame/Toolbar/PreviewAndShareButtons.js` y el flujo de preview                                                   | `TopToolbar.tsx` + `PreviewDialog.tsx`: botón Play fijo a la derecha incluso con toolbar estrecha, menú de preview, pausa, reinicio, debugger, tamaños de dispositivo, FPS y controles táctiles.                                                                                   |
+| IA opcional               | Comparada con la separación editor/drawer upstream                                                                    | `QuickAutomationBar.tsx` es un Drawer superpuesto en móvil y popover en escritorio; `InlineAiPrompt.tsx` es contextual. Ambos terminan encima del canvas y debajo del dock/modal: nunca sustituyen ni recalculan el dock.                                                          |
+
+Regresiones cubiertas en `tests/canvas-gestures.test.ts` y
+`tests/mobile-editor-parity.test.ts`: arbitraje por cantidad de punteros, pan de dos
+dedos, pinch anclado, límites `1/128…128`, zoom al cursor, encaje de la resolución,
+dock permanente, separación de overlays e inspector por ID. Los controles de datos
+siguen pasando por el reducer, por lo que Deshacer/Rehacer y el flujo contextual
+Ctrl/⌘+K permanecen integrados.
+
+Validación de la auditoría: **31/31 tests**, TypeScript estricto, ESLint sin warnings y
+build cliente/SSR/Cloudflare completados. Rollup conserva únicamente su aviso conocido y
+no bloqueante sobre `inlineDynamicImports`.
+
+## 5. Fuera de alcance deliberado
 
 Nexus Engine es un producto exclusivamente 2D: `3D` no forma parte de su alcance.
 También quedan fuera por ahora `GameplayTests`, `VersionHistory`, `Leaderboard`,
