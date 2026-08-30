@@ -171,19 +171,19 @@
   --comment-green: oklch(0.55 0.1 155); /* comment events */
   --event-alt: oklch(0.29 0.016 285.2); /* slightly lighter than toolbar */
   /* Events sheet — official GDevelop eventsSheet colors */
-  --ev-conditions: #25252E;
-  --ev-actions: #1D1D26;
-  --ev-border: #3E4452;
-  --ev-row: #282C34;
-  --ev-row-text: #D6DEEC;
-  --ev-selected: #4AB0E4;
-  --param-base: #0ECD7A;
-  --param-number: #E0D01F;
-  --param-object: #A483FF;
-  --param-behavior: #9AA5CE;
-  --param-operator: #FF85ED;
-  --param-var: #8AD6FF;
-  --param-error: #FE6C46;
+  --ev-conditions: #25252e;
+  --ev-actions: #1d1d26;
+  --ev-border: #3e4452;
+  --ev-row: #282c34;
+  --ev-row-text: #d6deec;
+  --ev-selected: #4ab0e4;
+  --param-base: #0ecd7a;
+  --param-number: #e0d01f;
+  --param-object: #a483ff;
+  --param-behavior: #9aa5ce;
+  --param-operator: #ff85ed;
+  --param-var: #8ad6ff;
+  --param-error: #fe6c46;
   /* === GDevelop 5 · DefaultDarkTheme (valores literales de theme.json) === */
   /* Marca: Nexus Engine reutiliza la rampa morada oficial (única fuente de verdad) */
   --brand: #7046ec;
@@ -284,19 +284,19 @@
   --comment-green: oklch(0.55 0.1 155);
   --event-alt: oklch(0.29 0.016 285.2);
   /* Events sheet — official GDevelop eventsSheet colors */
-  --ev-conditions: #25252E;
-  --ev-actions: #1D1D26;
-  --ev-border: #3E4452;
-  --ev-row: #282C34;
-  --ev-row-text: #D6DEEC;
-  --ev-selected: #4AB0E4;
-  --param-base: #0ECD7A;
-  --param-number: #E0D01F;
-  --param-object: #A483FF;
-  --param-behavior: #9AA5CE;
-  --param-operator: #FF85ED;
-  --param-var: #8AD6FF;
-  --param-error: #FE6C46;
+  --ev-conditions: #25252e;
+  --ev-actions: #1d1d26;
+  --ev-border: #3e4452;
+  --ev-row: #282c34;
+  --ev-row-text: #d6deec;
+  --ev-selected: #4ab0e4;
+  --param-base: #0ecd7a;
+  --param-number: #e0d01f;
+  --param-object: #a483ff;
+  --param-behavior: #9aa5ce;
+  --param-operator: #ff85ed;
+  --param-var: #8ad6ff;
+  --param-error: #fe6c46;
   /* === GDevelop 5 · DefaultDarkTheme (valores literales de theme.json) === */
   /* Marca: Nexus Engine reutiliza la rampa morada oficial (única fuente de verdad) */
   --brand: #7046ec;
