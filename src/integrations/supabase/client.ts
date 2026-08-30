@@ -43,9 +43,18 @@ function createOfflineSupabaseClient(): SupabaseClient {
         data: { subscription: { unsubscribe: () => undefined } },
       }),
       signOut: async () => ({ error: null }),
-      signUp: async () => ({ data: { user: null, session: null }, error: unavailable() }),
-      signInWithPassword: async () => ({ data: { user: null, session: null }, error: unavailable() }),
-      signInWithOAuth: async () => ({ data: { provider: "google", url: null }, error: unavailable() }),
+      signUp: async () => ({
+        data: { user: null, session: null },
+        error: unavailable(),
+      }),
+      signInWithPassword: async () => ({
+        data: { user: null, session: null },
+        error: unavailable(),
+      }),
+      signInWithOAuth: async () => ({
+        data: { provider: "google", url: null },
+        error: unavailable(),
+      }),
     },
   } as unknown as SupabaseClient;
 }
