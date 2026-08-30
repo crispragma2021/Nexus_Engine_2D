@@ -17,8 +17,17 @@ import { cn } from "@/lib/utils";
 import { useContextMenu, type MenuEntry } from "./gd/kit";
 import { S } from "@/lib/editor/i18n";
 import { copyInstances, cutInstances, hasClipboard, pasteInto } from "@/lib/editor/clipboard";
+import {
+  fitGameWindowZoom,
+  resolveTwoPointerGesture,
+  resolveZoomAtPoint,
+  shouldCenterGameWindow,
+  type CanvasGestureStart,
+  type CanvasPoint,
+} from "@/lib/editor/canvas-gestures";
 
 const HANDLE = 7;
+const WHEEL_ZOOM_FACTOR = 1.7 ** (1 / 16);
 type HandleId = "nw" | "n" | "ne" | "e" | "se" | "s" | "sw" | "w" | "rotate";
 
 const rgb = (value: string) => {
@@ -155,10 +164,20 @@ interface View {
   offsetY: number;
 }
 
+interface ActiveCanvasGesture {
+  pointerIds: readonly [number, number];
+  start: CanvasGestureStart;
+}
+
 export function SceneCanvas() {
   const { scene, ui, dispatch, project } = useEditor();
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const activeTouchPointers = useRef(new Map<number, CanvasPoint>());
+  const activeGesture = useRef<ActiveCanvasGesture | null>(null);
+  const touchSequenceTransformed = useRef(false);
+  const touchSequenceSelection = useRef<string[]>([]);
+  const didInitialFit = useRef(false);
   const [size, setSize] = useState({ width: 800, height: 600 });
   const [hover, setHover] = useState<{ x: number; y: number } | null>(null);
   const [drag, setDrag] = useState<
@@ -190,6 +209,8 @@ export function SceneCanvas() {
     | null
   >(null);
   const { open, menu } = useContextMenu();
+  const uiViewRef = useRef({ zoom: ui.zoom, pan: ui.pan });
+  uiViewRef.current = { zoom: ui.zoom, pan: ui.pan };
 
   const windowSize = useMemo(() => {
     const width = scene.useCustomWindowSize
@@ -208,23 +229,22 @@ export function SceneCanvas() {
   ]);
 
   const magnification = scene.magnification && scene.magnification > 0 ? scene.magnification : 1;
+  const centerWindow = useMemo(
+    () => shouldCenterGameWindow(size, windowSize, magnification),
+    [size, windowSize, magnification],
+  );
 
   const view = useMemo<View>(() => {
-    const fit = Math.min(
-      (size.width - 32) / (windowSize.width * magnification),
-      (size.height - 32) / (windowSize.height * magnification),
-    );
     const scale = ui.zoom * magnification;
     const centeredX = (size.width - windowSize.width * scale) / 2;
     const centeredY = (size.height - windowSize.height * scale) / 2;
     return {
       scale,
-      // GDevelop starts with the window top-left at the view origin; keep it
-      // centered when the window is smaller than the viewport (fit < 1 case).
-      offsetX: (fit < 1 ? centeredX : 0) + ui.pan.x,
-      offsetY: (fit < 1 ? centeredY : 0) + ui.pan.y,
+      // Keep large game windows centered as their zoom changes. User pan is
+      // applied afterwards and remains independent from the game frame.
+      offsetX: (centerWindow ? centeredX : 0) + ui.pan.x,
+      offsetY: (centerWindow ? centeredY : 0) + ui.pan.y,
     };
-    // `fit` only decides the centering, so it is fine to depend on size/zoom.
   }, [
     size.width,
     size.height,
@@ -234,6 +254,7 @@ export function SceneCanvas() {
     windowSize.width,
     windowSize.height,
     magnification,
+    centerWindow,
   ]);
 
   const toWorld = useCallback(
@@ -256,19 +277,35 @@ export function SceneCanvas() {
 
   /* ---------------------------------------------------------------- drawing */
   useEffect(() => {
+    didInitialFit.current = false;
+  }, [scene.name]);
+
+  useEffect(() => {
     const canvas = canvasRef.current;
     const wrap = wrapRef.current;
     if (!canvas || !wrap) return;
     const observer = new ResizeObserver(() => {
       const rect = wrap.getBoundingClientRect();
-      setSize({
+      const nextSize = {
         width: Math.max(120, Math.floor(rect.width)),
         height: Math.max(120, Math.floor(rect.height)),
-      });
+      };
+      setSize(nextSize);
+
+      // GDevelop chooses an initial zoom from the project resolution. Do the
+      // same once per scene so all four edges of the game window are visible.
+      if (!didInitialFit.current) {
+        didInitialFit.current = true;
+        const current = uiViewRef.current;
+        if (Math.abs(current.zoom - 1) < 0.0001 && current.pan.x === 0 && current.pan.y === 0) {
+          const zoom = fitGameWindowZoom(nextSize, windowSize, magnification);
+          if (zoom < 0.99) dispatch({ type: "ui", patch: { zoom, pan: { x: 0, y: 0 } } });
+        }
+      }
     });
     observer.observe(wrap);
     return () => observer.disconnect();
-  }, []);
+  }, [dispatch, magnification, scene.name, windowSize]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -284,15 +321,14 @@ export function SceneCanvas() {
     ctx.clearRect(0, 0, size.width, size.height);
     ctx.fillStyle = "#101017";
     ctx.fillRect(0, 0, size.width, size.height);
+    drawEditorBackdrop(ctx, size, view);
 
-    // Instances (the runtime renderer draws the window background, the grid is
-    // drawn in the same world transform, then selection on top).
+    // The runtime paints the game background only inside the resolution frame,
+    // while instances remain visible and editable anywhere in the infinite
+    // editor world (including negative and out-of-window coordinates).
     ctx.save();
     ctx.translate(view.offsetX, view.offsetY);
     ctx.scale(view.scale, view.scale);
-    ctx.beginPath();
-    ctx.rect(0, 0, windowSize.width, windowSize.height);
-    ctx.clip();
     renderScene(ctx, editorView.state, {
       width: windowSize.width,
       height: windowSize.height,
@@ -350,16 +386,33 @@ export function SceneCanvas() {
       ctx.restore();
     }
 
-    // Window border.
+    // High-contrast game-resolution frame. It must remain unmistakable against
+    // both the scene background and the infinite editor backdrop.
     ctx.save();
-    ctx.strokeStyle = "rgba(255,255,255,0.18)";
+    const frameLeft = view.offsetX;
+    const frameTop = view.offsetY;
+    const frameWidth = windowSize.width * view.scale;
+    const frameHeight = windowSize.height * view.scale;
+    ctx.strokeStyle = "#8AD6FF";
+    ctx.lineWidth = 2;
+    ctx.shadowColor = "rgba(0,0,0,0.9)";
+    ctx.shadowBlur = 4;
+    ctx.strokeRect(frameLeft - 1, frameTop - 1, frameWidth + 2, frameHeight + 2);
+    ctx.shadowBlur = 0;
+
+    const frameLabel = `JUEGO · ${windowSize.width}×${windowSize.height}`;
+    ctx.font = "600 10px ui-sans-serif, system-ui, sans-serif";
+    const labelWidth = Math.ceil(ctx.measureText(frameLabel).width) + 12;
+    const labelX = Math.max(4, Math.min(size.width - labelWidth - 4, frameLeft));
+    const labelY = frameTop >= 22 ? frameTop - 20 : Math.max(4, frameTop + 4);
+    ctx.fillStyle = "rgba(16,16,23,0.94)";
+    ctx.fillRect(labelX, labelY, labelWidth, 17);
+    ctx.strokeStyle = "rgba(138,214,255,0.75)";
     ctx.lineWidth = 1;
-    ctx.strokeRect(
-      view.offsetX - 0.5,
-      view.offsetY - 0.5,
-      windowSize.width * view.scale + 1,
-      windowSize.height * view.scale + 1,
-    );
+    ctx.strokeRect(labelX + 0.5, labelY + 0.5, labelWidth - 1, 16);
+    ctx.fillStyle = "#8AD6FF";
+    ctx.textBaseline = "middle";
+    ctx.fillText(frameLabel, labelX + 6, labelY + 8.5);
     ctx.restore();
 
     // Hover highlight.
@@ -377,8 +430,7 @@ export function SceneCanvas() {
       }
     }
   }, [
-    size.width,
-    size.height,
+    size,
     view,
     scene,
     windowSize,
@@ -435,7 +487,48 @@ export function SceneCanvas() {
     return { x: event.clientX - rect.left, y: event.clientY - rect.top };
   };
 
+  const startTwoPointerGesture = () => {
+    const pair = [...activeTouchPointers.current.entries()].slice(0, 2);
+    const first = pair[0];
+    const second = pair[1];
+    if (!first || !second) return;
+    activeGesture.current = {
+      pointerIds: [first[0], second[0]],
+      start: {
+        points: [first[1], second[1]],
+        zoom: ui.zoom,
+        magnification,
+        pan: { ...ui.pan },
+        transform: { ...view },
+        viewport: { ...size },
+        gameWindow: { ...windowSize },
+        centerWindow,
+      },
+    };
+    touchSequenceTransformed.current = true;
+    // A two-finger navigation gesture must not inherit the selection side
+    // effect caused when its first finger touched the canvas.
+    dispatch({ type: "selectInstances", ids: touchSequenceSelection.current });
+    setDrag(null);
+    setHover(null);
+  };
+
   const onPointerDown = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    const point = localPoint(event);
+    if (event.pointerType === "touch") {
+      if (activeTouchPointers.current.size === 0) {
+        touchSequenceTransformed.current = false;
+        touchSequenceSelection.current = [...ui.selectedInstanceIds];
+      }
+      activeTouchPointers.current.set(event.pointerId, point);
+      event.currentTarget.setPointerCapture(event.pointerId);
+      if (activeTouchPointers.current.size >= 2) {
+        startTwoPointerGesture();
+        event.preventDefault();
+        return;
+      }
+    }
+
     if (event.button === 1 || (event.button === 0 && event.altKey)) {
       setDrag({
         kind: "pan",
@@ -446,7 +539,6 @@ export function SceneCanvas() {
       return;
     }
     if (event.button !== 0) return;
-    const point = localPoint(event);
     const handle = handleAt(point);
     const world = toWorld(point);
     dispatch({
@@ -460,6 +552,11 @@ export function SceneCanvas() {
     if (handle && ui.selectedInstanceIds.length === 1) {
       const id = ui.selectedInstanceIds[0]!;
       const object = editorView.byInstance.get(id);
+      const instance = scene.instances.find((candidate) => candidate.id === id);
+      const layer = instance
+        ? scene.layers.find((candidate) => candidate.name === instance.layer)
+        : undefined;
+      if (instance?.locked || layer?.locked) return;
       if (handle === "rotate" && object) {
         const center = { x: object.x + object.width / 2, y: object.y + object.height / 2 };
         setDrag({
@@ -491,6 +588,14 @@ export function SceneCanvas() {
       event.currentTarget.setPointerCapture(event.pointerId);
       return;
     }
+    const sourceInstance = scene.instances.find((instance) => instance.id === hit.id);
+    const sourceLayer = sourceInstance
+      ? scene.layers.find((layer) => layer.name === sourceInstance.layer)
+      : undefined;
+    if (sourceInstance?.locked || sourceLayer?.locked) {
+      dispatch({ type: "selectInstances", ids: [hit.id] });
+      return;
+    }
     let ids = ui.selectedInstanceIds;
     if (event.shiftKey) {
       ids = ids.includes(hit.id) ? ids.filter((i) => i !== hit.id) : [...ids, hit.id];
@@ -504,7 +609,13 @@ export function SceneCanvas() {
     const origin = new Map<string, { x: number; y: number }>();
     for (const id of ids) {
       const object = editorView.byInstance.get(id);
-      if (object) origin.set(id, { x: object.x, y: object.y });
+      const instance = scene.instances.find((candidate) => candidate.id === id);
+      const layer = instance
+        ? scene.layers.find((candidate) => candidate.name === instance.layer)
+        : undefined;
+      if (object && !instance?.locked && !layer?.locked) {
+        origin.set(id, { x: object.x, y: object.y });
+      }
     }
     setDrag({ kind: "move", start: world, origin });
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -512,7 +623,25 @@ export function SceneCanvas() {
 
   const onPointerMove = (event: React.PointerEvent<HTMLCanvasElement>) => {
     const point = localPoint(event);
-    setHover(point);
+    if (event.pointerType === "touch" && activeTouchPointers.current.has(event.pointerId)) {
+      activeTouchPointers.current.set(event.pointerId, point);
+      const gesture = activeGesture.current;
+      if (gesture) {
+        const first = activeTouchPointers.current.get(gesture.pointerIds[0]);
+        const second = activeTouchPointers.current.get(gesture.pointerIds[1]);
+        if (first && second) {
+          const next = resolveTwoPointerGesture(gesture.start, [first, second]);
+          dispatch({ type: "ui", patch: next });
+        }
+        event.preventDefault();
+        return;
+      }
+      // Once a sequence became a two-finger transform, the last remaining
+      // finger cannot accidentally select or move an instance.
+      if (touchSequenceTransformed.current) return;
+    }
+
+    if (event.pointerType !== "touch") setHover(point);
     dispatch({
       type: "ui",
       patch: {
@@ -594,6 +723,24 @@ export function SceneCanvas() {
   };
 
   const onPointerUp = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    if (event.pointerType === "touch") {
+      const transformed = touchSequenceTransformed.current;
+      activeTouchPointers.current.delete(event.pointerId);
+      if (activeGesture.current || transformed) {
+        activeGesture.current = null;
+        setDrag(null);
+        if (activeTouchPointers.current.size >= 2) startTwoPointerGesture();
+        if (activeTouchPointers.current.size === 0) touchSequenceTransformed.current = false;
+        try {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        } catch {
+          /* pointer capture may already be gone */
+        }
+        return;
+      }
+      if (activeTouchPointers.current.size === 0) touchSequenceTransformed.current = false;
+    }
+
     if (drag?.kind === "marquee") {
       const a = toWorld(drag.start);
       const b = toWorld(drag.current);
@@ -627,11 +774,38 @@ export function SceneCanvas() {
     }
   };
 
+  const onPointerCancel = (event: React.PointerEvent<HTMLCanvasElement>) => {
+    activeTouchPointers.current.delete(event.pointerId);
+    activeGesture.current = null;
+    setDrag(null);
+    setHover(null);
+    if (activeTouchPointers.current.size === 0) touchSequenceTransformed.current = false;
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {
+      /* pointer capture may already be gone */
+    }
+  };
+
   const onWheel = (event: React.WheelEvent<HTMLCanvasElement>) => {
     if (event.ctrlKey || event.metaKey) {
       event.preventDefault();
-      const next = ui.zoom * (event.deltaY < 0 ? 1.1 : 1 / 1.1);
-      dispatch({ type: "ui", patch: { zoom: Math.min(64, Math.max(0.02, next)) } });
+      const rect = event.currentTarget.getBoundingClientRect();
+      const point = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+      const next = resolveZoomAtPoint(
+        point,
+        ui.zoom * (event.deltaY < 0 ? WHEEL_ZOOM_FACTOR : 1 / WHEEL_ZOOM_FACTOR),
+        {
+          zoom: ui.zoom,
+          magnification,
+          pan: ui.pan,
+          transform: view,
+          viewport: size,
+          gameWindow: windowSize,
+          centerWindow,
+        },
+      );
+      dispatch({ type: "ui", patch: next });
       return;
     }
     if (event.shiftKey) {
@@ -773,6 +947,15 @@ export function SceneCanvas() {
     ];
   };
 
+  const fitWindow = () =>
+    dispatch({
+      type: "ui",
+      patch: {
+        zoom: fitGameWindowZoom(size, windowSize, magnification),
+        pan: { x: 0, y: 0 },
+      },
+    });
+
   const cursor =
     drag?.kind === "move"
       ? "grabbing"
@@ -800,24 +983,29 @@ export function SceneCanvas() {
       >
         <canvas
           ref={canvasRef}
+          aria-label="Editor de escena 2D: un dedo interactúa; dos dedos desplazan y amplían"
+          data-touch-controls="one-finger-interaction two-finger-pan pinch-zoom"
           style={{ width: size.width, height: size.height, cursor }}
           className="absolute inset-0 block touch-none select-none"
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}
           onPointerUp={onPointerUp}
-          onPointerLeave={() => setHover(null)}
+          onPointerCancel={onPointerCancel}
+          onPointerLeave={(event) => {
+            if (event.pointerType !== "touch") setHover(null);
+          }}
           onWheel={onWheel}
           onDoubleClick={onDoubleClick}
           onContextMenu={(event) => open(event, contextMenuEntries(event))}
         />
       </div>
-      <StatusBar />
+      <StatusBar onFitWindow={fitWindow} />
       {menu}
     </div>
   );
 }
 
-function StatusBar() {
+function StatusBar({ onFitWindow }: { onFitWindow: () => void }) {
   const { ui, scene, project } = useEditor();
   const { width, height } = useMemo(() => {
     const w = scene.useCustomWindowSize
@@ -833,17 +1021,30 @@ function StatusBar() {
       <span className="w-24">
         {ui.cursorPosition ? `${ui.cursorPosition.x};${ui.cursorPosition.y}` : "—"}
       </span>
-      <span className="hidden md:inline">
+      <span className="hidden sm:inline">
         Ventana: {width}×{height}
       </span>
+      <button
+        type="button"
+        onClick={onFitWindow}
+        className="rounded px-1 text-[#8AD6FF] hover:bg-elevated hover:text-foreground"
+        title="Encajar la ventana del juego"
+      >
+        Encajar
+      </button>
       <span className="hidden lg:inline">
         Capa: {scene.activeLayer} · {S.instances}: {scene.instances.length}
       </span>
+      <span className="hidden text-[10px] text-text-placeholder sm:inline md:hidden">
+        1 dedo: editar · 2: mover/zoom
+      </span>
       <span className="ml-auto">{Math.round(ui.zoom * 100)}%</span>
-      <span className={cn(scene.grid.show ? "text-[#8AD6FF]" : "")}>
+      <span className={cn("hidden sm:inline", scene.grid.show ? "text-[#8AD6FF]" : "")}>
         {scene.grid.width}×{scene.grid.height}
       </span>
-      <span>{ui.showHiddenInstances ? "Ocultas visibles" : "Ocultas ocultas"}</span>
+      <span className="hidden lg:inline">
+        {ui.showHiddenInstances ? "Ocultas visibles" : "Ocultas ocultas"}
+      </span>
     </div>
   );
 }
@@ -903,6 +1104,32 @@ function drawSelection(ctx: CanvasRenderingContext2D, object: RTObject, scale: n
   ctx.arc(object.width / 2, -24 / scale, size * 0.7, 0, Math.PI * 2);
   ctx.fill();
   ctx.stroke();
+  ctx.restore();
+}
+
+function positiveModulo(value: number, divisor: number): number {
+  return ((value % divisor) + divisor) % divisor;
+}
+
+function drawEditorBackdrop(
+  ctx: CanvasRenderingContext2D,
+  size: { width: number; height: number },
+  view: View,
+) {
+  let worldStep = 64;
+  while (worldStep * view.scale < 22) worldStep *= 2;
+  while (worldStep * view.scale > 88) worldStep /= 2;
+  const screenStep = Math.max(12, worldStep * view.scale);
+  const startX = positiveModulo(view.offsetX, screenStep);
+  const startY = positiveModulo(view.offsetY, screenStep);
+
+  ctx.save();
+  ctx.fillStyle = "rgba(158,180,255,0.16)";
+  for (let x = startX; x <= size.width; x += screenStep) {
+    for (let y = startY; y <= size.height; y += screenStep) {
+      ctx.fillRect(Math.round(x) - 0.5, Math.round(y) - 0.5, 1.5, 1.5);
+    }
+  }
   ctx.restore();
 }
 

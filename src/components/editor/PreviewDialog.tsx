@@ -206,18 +206,22 @@ export function PreviewDialog() {
         if (event.target === event.currentTarget) close();
       }}
     >
-      <header className="flex h-11 shrink-0 items-center gap-2 border-b border-separator bg-toolbar px-2">
-        <span className="flex items-center gap-1.5 text-[12.5px] font-semibold text-foreground">
+      <header className="flex h-11 shrink-0 items-center gap-1 overflow-hidden border-b border-separator bg-toolbar px-2 sm:gap-2">
+        <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-[12.5px] font-semibold text-foreground">
           <Play className="h-3.5 w-3.5 fill-current text-success" />
           {S.preview}
-          <span className="font-normal text-text-secondary">
+          <span className="hidden truncate font-normal text-text-secondary sm:inline">
             — {runtime?.state.sceneName ?? scene.name}
           </span>
         </span>
-        <span className="ml-2 rounded bg-elevated px-1.5 py-0.5 text-[11px] tabular-nums text-text-secondary">
+        <span className="ml-1 hidden rounded bg-elevated px-1.5 py-0.5 text-[11px] tabular-nums text-text-secondary sm:inline">
           {fps} FPS
         </span>
-        {status ? <span className="truncate text-[11.5px] text-[#8AD6FF]">{status}</span> : null}
+        {status ? (
+          <span className="hidden max-w-72 truncate text-[11.5px] text-[#8AD6FF] lg:inline">
+            {status}
+          </span>
+        ) : null}
         <div className="ml-auto flex items-center gap-1">
           <GdButton
             size="small"
@@ -225,7 +229,7 @@ export function PreviewDialog() {
             icon={paused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
             onClick={() => setPaused((value) => !value)}
           >
-            {paused ? S.resume : S.pause}
+            <span className="hidden sm:inline">{paused ? S.resume : S.pause}</span>
           </GdButton>
           <GdButton
             size="small"
@@ -236,7 +240,7 @@ export function PreviewDialog() {
               setPaused(false);
             }}
           >
-            {S.restart}
+            <span className="hidden sm:inline">{S.restart}</span>
           </GdButton>
           <GdButton
             size="small"
@@ -245,7 +249,7 @@ export function PreviewDialog() {
             className={showDebugger ? "bg-[#3D4D51] text-[#E5C07B]" : undefined}
             onClick={() => setShowDebugger((value) => !value)}
           >
-            {S.debugger}
+            <span className="hidden sm:inline">{S.debugger}</span>
           </GdButton>
           <button
             type="button"
@@ -269,7 +273,7 @@ export function PreviewDialog() {
         </div>
       </header>
 
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 items-center justify-center p-3">
           <div
             className="relative flex max-h-full w-full max-w-[min(100%,1400px)] items-center justify-center"
@@ -305,7 +309,7 @@ export function PreviewDialog() {
         {showDebugger && runtime ? (
           <DebuggerPanel
             runtime={runtime}
-            className="w-[320px] shrink-0 border-l border-separator"
+            className="absolute inset-y-0 right-0 z-10 w-full border-l border-separator sm:static sm:w-[320px] sm:shrink-0"
           />
         ) : null}
       </div>

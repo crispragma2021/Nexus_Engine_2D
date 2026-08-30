@@ -134,6 +134,8 @@
 
 :root {
   --radius: 0.375rem;
+  /* Fixed mobile editor chrome. Drawers and AI overlays stop above this dock. */
+  --mobile-editor-dock-height: calc(3.5rem + env(safe-area-inset-bottom, 0px));
   /* Surfaces (GDevelop Default Dark) */
   --window: oklch(0.2348 0.0172 285); /* #1D1D26 */
   --toolbar: oklch(0.2684 0.0166 285.23); /* #25252E */

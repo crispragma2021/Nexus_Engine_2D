@@ -23,7 +23,7 @@ import type { GDLayer } from "@/lib/editor/types";
 import { cn } from "@/lib/utils";
 import { GdMenu, Panel, type MenuEntry } from "./gd/kit";
 
-export function LayersPanel() {
+export function LayersPanel({ onClose }: { onClose?: (() => void) | undefined } = {}) {
   const { scene, ui, dispatch } = useEditor();
   const [menu, setMenu] = React.useState<{ x: number; y: number } | null>(null);
   const [rowMenu, setRowMenu] = React.useState<{
@@ -124,8 +124,7 @@ export function LayersPanel() {
     <Panel
       title={S.layers}
       badge={scene.layers.length}
-      className="min-h-0 shrink-0 border-t border-separator"
-      bodyClassName="max-h-[38%]"
+      className="min-h-0 flex-1"
       actions={
         <>
           <button
@@ -152,6 +151,16 @@ export function LayersPanel() {
           >
             <Plus className="h-3.5 w-3.5" />
           </button>
+          {onClose ? (
+            <button
+              type="button"
+              aria-label={S.closeLayersPanel}
+              onClick={onClose}
+              className="grid h-6 w-6 place-items-center rounded text-[14px] text-text-secondary hover:bg-elevated hover:text-foreground"
+            >
+              ×
+            </button>
+          ) : null}
         </>
       }
     >
@@ -162,7 +171,17 @@ export function LayersPanel() {
         return (
           <div
             key={layer.name}
-            onClick={() => dispatch({ type: "setActiveLayer", name: layer.name })}
+            onClick={() => {
+              dispatch({ type: "setActiveLayer", name: layer.name });
+              dispatch({
+                type: "ui",
+                patch: {
+                  selectedLayerName: layer.name,
+                  selectedInstanceIds: [],
+                  selectedObjectIds: [],
+                },
+              });
+            }}
             className={cn(
               "group mx-1 flex cursor-pointer items-center gap-1 rounded px-1 py-[5px] text-[12.5px] hover:bg-list-hover",
               isActive && "bg-selection",

@@ -1,37 +1,42 @@
 import * as React from "react";
-import { Box, Boxes, PenLine, ListTree, Layers } from "lucide-react";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Box, Boxes, Layers, ListTree, PenLine } from "lucide-react";
+import { Sheet, SheetContent, SheetDescription, SheetTitle } from "@/components/ui/sheet";
 import { useEditor } from "@/lib/editor/store";
+import { S } from "@/lib/editor/i18n";
 import { cn } from "@/lib/utils";
+import { GroupsPanel } from "./GroupsPanel";
+import { InstancesPanel } from "./InstancesPanel";
+import { LayersPanel } from "./LayersPanel";
 import { ObjectsPanel } from "./ObjectsPanel";
 import { PropertiesPanel } from "./PropertiesPanel";
-import { GroupsPanel } from "./GroupsPanel";
 
 type SheetKey = "objects" | "groups" | "properties" | "instances" | "layers";
 
 const ITEMS: { key: SheetKey; label: string; icon: React.ElementType }[] = [
-  { key: "objects", label: "Objetos", icon: Box },
-  { key: "groups", label: "Grupos", icon: Boxes },
-  { key: "properties", label: "Editar", icon: PenLine },
-  { key: "instances", label: "Instancias", icon: ListTree },
-  { key: "layers", label: "Capas", icon: Layers },
+  { key: "objects", label: S.objects, icon: Box },
+  { key: "groups", label: S.objectGroups, icon: Boxes },
+  { key: "properties", label: S.properties, icon: PenLine },
+  { key: "instances", label: S.instances, icon: ListTree },
+  { key: "layers", label: S.layers, icon: Layers },
 ];
 
 const MIN_VH = 25;
 const MAX_VH = 90;
 const DEFAULT_VH = 65;
-const STORAGE_KEY = "gdevelop:panel-height";
+const STORAGE_KEY = "nexus-engine:mobile-panel-height";
+const LEGACY_STORAGE_KEY = "gdevelop:panel-height";
 
-function clampVh(v: number) {
-  return Math.min(MAX_VH, Math.max(MIN_VH, Math.round(v)));
+function clampVh(value: number) {
+  return Math.min(MAX_VH, Math.max(MIN_VH, Math.round(value)));
 }
 
 function readStoredHeight(): number {
   if (typeof window === "undefined") return DEFAULT_VH;
-  const raw = window.localStorage.getItem(STORAGE_KEY);
+  const raw =
+    window.localStorage.getItem(STORAGE_KEY) ?? window.localStorage.getItem(LEGACY_STORAGE_KEY);
   if (!raw) return DEFAULT_VH;
-  const n = Number(raw);
-  return Number.isFinite(n) ? clampVh(n) : DEFAULT_VH;
+  const value = Number(raw);
+  return Number.isFinite(value) ? clampVh(value) : DEFAULT_VH;
 }
 
 export function MobileBottomBar() {
@@ -39,27 +44,21 @@ export function MobileBottomBar() {
   const [open, setOpen] = React.useState<SheetKey | null>(null);
   const [heightVh, setHeightVh] = React.useState<number>(DEFAULT_VH);
   const [dragging, setDragging] = React.useState(false);
-
-  // Restore persisted height after hydration (avoids SSR mismatch).
-  React.useEffect(() => {
-    setHeightVh(readStoredHeight());
-  }, []);
-
-  // Pointer-drag resize of the bottom sheet via the top handle.
-  // pointerdown is wired directly in JSX (ref-stale effects missed it); move/up
-  // go to window so the drag tracks once the finger leaves the handle area.
   const dragState = React.useRef<{ startY: number; startVh: number } | null>(null);
   const heightRef = React.useRef(heightVh);
   heightRef.current = heightVh;
 
-  const onMove = React.useCallback((e: PointerEvent) => {
-    const s = dragState.current;
-    if (!s) return;
-    e.preventDefault();
-    const startHeightPx = (s.startVh / 100) * window.innerHeight;
-    const newHeightPx = startHeightPx - (e.clientY - s.startY);
-    const vh = (newHeightPx / window.innerHeight) * 100;
-    setHeightVh(clampVh(vh));
+  React.useEffect(() => {
+    setHeightVh(readStoredHeight());
+  }, []);
+
+  const onMove = React.useCallback((event: PointerEvent) => {
+    const start = dragState.current;
+    if (!start) return;
+    event.preventDefault();
+    const startHeightPx = (start.startVh / 100) * window.innerHeight;
+    const nextHeightPx = startHeightPx - (event.clientY - start.startY);
+    setHeightVh(clampVh((nextHeightPx / window.innerHeight) * 100));
   }, []);
 
   const endDrag = React.useCallback(() => {
@@ -72,89 +71,120 @@ export function MobileBottomBar() {
     window.localStorage.setItem(STORAGE_KEY, String(clampVh(heightRef.current)));
   }, [onMove]);
 
-  const onHandlePointerDown = (e: React.PointerEvent) => {
-    e.preventDefault();
+  React.useEffect(
+    () => () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", endDrag);
+      window.removeEventListener("pointercancel", endDrag);
+    },
+    [endDrag, onMove],
+  );
+
+  const onHandlePointerDown = (event: React.PointerEvent) => {
+    event.preventDefault();
     setDragging(true);
-    dragState.current = { startY: e.clientY, startVh: heightRef.current };
+    dragState.current = { startY: event.clientY, startVh: heightRef.current };
     window.addEventListener("pointermove", onMove, { passive: false });
     window.addEventListener("pointerup", endDrag);
     window.addEventListener("pointercancel", endDrag);
   };
 
-  const onHandleDouble = () => {
+  const resetHeight = () => {
     setHeightVh(DEFAULT_VH);
     window.localStorage.setItem(STORAGE_KEY, String(DEFAULT_VH));
   };
 
-  const handle = (key: SheetKey) => {
+  const select = (key: SheetKey) => {
     if (key === "properties" || key === "instances" || key === "layers") {
-      dispatch({ type: "ui", patch: { rightTab: key } });
+      dispatch({
+        type: "ui",
+        patch: {
+          rightTab: key,
+          ...(key === "properties" ? { showPropertiesPanel: true } : {}),
+          ...(key === "instances" ? { showInstancesPanel: true } : {}),
+          ...(key === "layers" ? { showLayersPanel: true } : {}),
+        },
+      });
     }
-    setOpen((prev) => (prev === key ? null : key));
+    setOpen((current) => (current === key ? null : key));
   };
 
-  const isRight = open === "properties" || open === "instances" || open === "layers";
+  const closePanel = React.useCallback(() => setOpen(null), []);
+  const title = ITEMS.find((item) => item.key === open)?.label ?? S.properties;
 
   return (
     <>
-      <nav className="flex h-14 shrink-0 items-stretch border-t border-separator bg-toolbar pb-[env(safe-area-inset-bottom)] md:hidden">
+      <nav
+        aria-label="Herramientas del editor de escena"
+        data-editor-mobile-dock="permanent"
+        className="fixed inset-x-0 bottom-0 z-40 flex h-[var(--mobile-editor-dock-height)] items-stretch border-t border-separator bg-toolbar pb-[env(safe-area-inset-bottom)] md:hidden"
+      >
         {ITEMS.map(({ key, label, icon: Icon }) => (
           <button
             key={key}
             type="button"
             aria-label={label}
+            aria-controls="mobile-editor-drawer"
+            aria-expanded={open === key}
             aria-pressed={open === key}
-            onClick={() => handle(key)}
+            onClick={() => select(key)}
             className={cn(
-              "flex flex-1 flex-col items-center justify-center gap-0.5 text-[9px] font-medium uppercase tracking-wide transition-colors",
-              open === key ? "text-link" : "text-muted-foreground active:bg-elevated",
+              "relative flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 text-[8px] font-medium uppercase tracking-tight transition-colors",
+              open === key ? "bg-[#32323B] text-link" : "text-muted-foreground active:bg-elevated",
             )}
           >
-            <Icon className="h-5 w-5" />
-            {label}
+            <span
+              aria-hidden
+              className={cn(
+                "absolute inset-x-2 top-0 h-0.5 rounded-full bg-transparent",
+                open === key && "bg-[#8AD6FF]",
+              )}
+            />
+            <Icon className="h-5 w-5 shrink-0" />
+            <span className="w-full truncate">{label}</span>
           </button>
         ))}
       </nav>
 
-      <Sheet open={open !== null} onOpenChange={(v) => !v && setOpen(null)}>
+      <Sheet open={open !== null} modal={false} onOpenChange={(value) => !value && closePanel()}>
         <SheetContent
+          id="mobile-editor-drawer"
           side="bottom"
+          hideCloseButton
+          overlayClassName="bottom-[var(--mobile-editor-dock-height)] z-20 bg-black/55 md:hidden"
           className={cn(
-            "border-separator bg-toolbar p-0 text-foreground",
-            // Kill the slide animation while actively dragging for smooth resizing.
+            "bottom-[var(--mobile-editor-dock-height)] z-30 flex max-h-[calc(100dvh-var(--mobile-editor-dock-height)-2rem)] flex-col gap-0 border-separator bg-toolbar p-0 text-foreground md:hidden",
             dragging && "transition-none data-[state=open]:animate-none",
           )}
-          style={{ height: `${heightVh}vh` }}
+          style={{
+            height: `min(${heightVh}dvh, calc(100dvh - var(--mobile-editor-dock-height) - 2rem))`,
+          }}
         >
-          {/* Resize handle: thin visually, but a 44px touch target. */}
+          <SheetTitle className="sr-only">{title}</SheetTitle>
+          <SheetDescription className="sr-only">
+            Panel superpuesto del editor. Arrastra el control superior para cambiar su altura.
+          </SheetDescription>
+
           <div
             role="separator"
             aria-orientation="horizontal"
-            aria-label="Drag to resize panel"
+            aria-label="Cambiar la altura del panel"
             onPointerDown={onHandlePointerDown}
-            onDoubleClick={onHandleDouble}
+            onDoubleClick={resetHeight}
             className={cn(
-              "flex h-11 shrink-0 cursor-grab touch-none select-none items-center justify-center border-b border-separator",
+              "flex h-9 shrink-0 cursor-grab touch-none select-none items-center justify-center border-b border-separator",
               dragging && "cursor-grabbing",
             )}
           >
             <span className="h-1.5 w-10 rounded-full bg-muted-foreground/50" />
           </div>
 
-          <SheetHeader className="shrink-0 space-y-0 px-4 py-3">
-            <SheetTitle className="text-left text-[17px] font-bold text-foreground">
-              {open === "properties"
-                ? "Propiedades de la instancia"
-                : open === "groups"
-                  ? "Grupos de objetos"
-                  : (ITEMS.find((i) => i.key === open)?.label ?? "")}
-            </SheetTitle>
-          </SheetHeader>
-
-          <div className="h-full min-h-0 flex-1 overflow-hidden [&>aside]:h-full [&>aside]:w-full [&>aside]:border-0">
-            {open === "objects" ? <ObjectsPanel /> : null}
-            {open === "groups" ? <GroupsPanel /> : null}
-            {isRight ? <PropertiesPanel /> : null}
+          <div className="flex min-h-0 flex-1 overflow-hidden [&>div]:min-h-0 [&>div]:w-full [&>section]:h-full [&>section]:w-full [&>section]:border-0">
+            {open === "objects" ? <ObjectsPanel onClose={closePanel} /> : null}
+            {open === "groups" ? <GroupsPanel standalone onClose={closePanel} /> : null}
+            {open === "properties" ? <PropertiesPanel /> : null}
+            {open === "instances" ? <InstancesPanel onClose={closePanel} /> : null}
+            {open === "layers" ? <LayersPanel onClose={closePanel} /> : null}
           </div>
         </SheetContent>
       </Sheet>

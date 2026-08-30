@@ -244,7 +244,7 @@ function ObjectGlyph({ object }: { object: GDObjectDef }) {
   );
 }
 
-export function ObjectsPanel() {
+export function ObjectsPanel({ onClose }: { onClose?: (() => void) | undefined } = {}) {
   const { scene, ui, dispatch } = useEditor();
   const [query, setQuery] = React.useState("");
   const [openSections, setOpenSections] = React.useState({
@@ -278,7 +278,10 @@ export function ObjectsPanel() {
         <button
           type="button"
           aria-label="Contraer"
-          onClick={() => dispatch({ type: "ui", patch: { showObjectsPanel: false } })}
+          onClick={() => {
+            if (onClose) onClose();
+            else dispatch({ type: "ui", patch: { showLeftPanel: false } });
+          }}
           className="grid h-6 w-6 place-items-center rounded text-text-secondary hover:bg-elevated hover:text-foreground"
         >
           <ChevronRight className="h-3.5 w-3.5" />

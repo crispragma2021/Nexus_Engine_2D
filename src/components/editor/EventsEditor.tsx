@@ -157,7 +157,7 @@ export function EventsEditor() {
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-[#1d1f24]">
       {/* Toolbar of the sheet */}
-      <div className="flex h-11 shrink-0 items-center gap-1 border-b border-[#1a1c20] bg-[#22252c] px-2">
+      <div className="flex h-11 shrink-0 items-center gap-1 overflow-x-auto border-b border-[#1a1c20] bg-[#22252c] px-2 [&::-webkit-scrollbar]:h-0">
         <button
           type="button"
           onClick={(event) => {
@@ -210,7 +210,7 @@ export function EventsEditor() {
           />
         ) : null}
 
-        <div className="ml-auto flex w-56 items-center">
+        <div className="ml-auto flex w-28 items-center sm:w-56">
           <SearchBar
             value={query}
             onChange={setQuery}
@@ -638,7 +638,7 @@ function EventRow({
   return (
     <div className={cn("mb-px flex flex-col", isSubEvent && "pl-6")}>
       <div
-        className={cn("flex items-stretch", isSubEvent && "relative")}
+        className={cn("flex min-w-[600px] items-stretch sm:min-w-0", isSubEvent && "relative")}
         onClick={(e) =>
           dispatch({
             type: "selectEvents",

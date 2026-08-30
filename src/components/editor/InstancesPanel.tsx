@@ -26,7 +26,7 @@ import { cn } from "@/lib/utils";
 import { GdButton, GdMenu, Panel, SearchBar, type MenuEntry } from "./gd/kit";
 import { CatalogIcon, iconForObjectType } from "./gd/icons";
 
-export function InstancesPanel() {
+export function InstancesPanel({ onClose }: { onClose?: (() => void) | undefined } = {}) {
   const { scene, ui, dispatch, project } = useEditor();
   const [query, setQuery] = React.useState("");
   const [settings, setSettings] = React.useState<{ x: number; y: number } | null>(null);
@@ -143,7 +143,10 @@ export function InstancesPanel() {
           <button
             type="button"
             aria-label={S.closeInstancesPanel}
-            onClick={() => dispatch({ type: "ui", patch: { showInstancesPanel: false } })}
+            onClick={() => {
+              if (onClose) onClose();
+              else dispatch({ type: "ui", patch: { showInstancesPanel: false } });
+            }}
             className="grid h-6 w-6 place-items-center rounded text-[14px] leading-none text-text-secondary hover:bg-elevated hover:text-foreground"
           >
             ×

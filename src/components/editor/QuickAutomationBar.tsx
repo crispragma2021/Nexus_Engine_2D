@@ -275,22 +275,28 @@ export function QuickAutomationBar() {
       <button
         type="button"
         onClick={() => dispatch({ type: "ui", patch: { quickAutomationOpen: true } })}
-        className="fixed bottom-12 left-1/2 z-40 hidden -translate-x-1/2 items-center gap-1 rounded-full border border-separator bg-[#1D1D26]/85 px-2.5 py-1 text-[10.5px] text-text-secondary shadow-lg backdrop-blur hover:border-[#6868E8] hover:text-foreground md:flex"
+        className="fixed right-3 bottom-[calc(var(--mobile-editor-dock-height)+0.75rem)] z-[25] flex h-10 w-10 items-center justify-center rounded-full border border-separator bg-[#1D1D26]/90 text-text-secondary shadow-lg backdrop-blur hover:border-[#6868E8] hover:text-foreground md:right-auto md:bottom-4 md:left-1/2 md:h-auto md:w-auto md:-translate-x-1/2 md:gap-1 md:px-2.5 md:py-1 md:text-[10.5px]"
         title="Automatización rápida (Ctrl/Cmd+K)"
       >
-        <Sparkles className="h-3 w-3 text-[#A996FF]" />
-        Automatizar
-        <kbd className="ml-1 rounded bg-[#101017] px-1 text-[9px]">Ctrl/⌘ K</kbd>
+        <Sparkles className="h-4 w-4 text-[#A996FF] md:h-3 md:w-3" />
+        <span className="hidden md:inline">Automatizar</span>
+        <kbd className="ml-1 hidden rounded bg-[#101017] px-1 text-[9px] md:inline">Ctrl/⌘ K</kbd>
       </button>
     );
   }
 
   const activeMode = MODES.find((entry) => entry.id === mode)!;
   return (
-    <div className="fixed bottom-12 left-1/2 z-[9000] w-[min(720px,calc(100vw-1rem))] -translate-x-1/2 md:bottom-4">
+    <div
+      role="dialog"
+      aria-modal="false"
+      aria-label="Automatización rápida"
+      data-ai-overlay="drawer"
+      className="fixed inset-x-0 bottom-[var(--mobile-editor-dock-height)] z-[35] w-full md:inset-x-auto md:bottom-4 md:left-1/2 md:w-[min(720px,calc(100vw-1rem))] md:-translate-x-1/2"
+    >
       <form
         onSubmit={submit}
-        className="overflow-hidden rounded-xl border border-[#494952] bg-[#17171F]/95 shadow-2xl backdrop-blur-xl"
+        className="max-h-[calc(100dvh-var(--mobile-editor-dock-height)-1rem)] overflow-y-auto rounded-t-xl border border-[#494952] bg-[#17171F]/95 shadow-2xl backdrop-blur-xl md:max-h-[calc(100dvh-2rem)] md:rounded-xl"
       >
         <div className="flex items-center gap-1 border-b border-separator px-2 py-1.5">
           <Sparkles className="mr-1 h-4 w-4 text-[#A996FF]" />
@@ -298,6 +304,8 @@ export function QuickAutomationBar() {
             <button
               key={entry.id}
               type="button"
+              aria-label={entry.label}
+              title={entry.label}
               onClick={() => setMode(entry.id)}
               className={cn(
                 "flex items-center gap-1 rounded px-2 py-1 text-[11px] text-text-secondary hover:bg-elevated hover:text-foreground",
@@ -305,7 +313,7 @@ export function QuickAutomationBar() {
               )}
             >
               <entry.icon className="h-3.5 w-3.5" />
-              {entry.label}
+              <span className="hidden sm:inline">{entry.label}</span>
             </button>
           ))}
           <span className="ml-auto hidden text-[10px] text-text-placeholder sm:inline">
