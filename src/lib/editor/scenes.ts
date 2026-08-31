@@ -10,9 +10,9 @@ import type {
   GDProject,
   GDScene,
   GDVariable,
-} from "./types";
-import { DEFAULT_GRID } from "./types";
-import { uid } from "./ids";
+} from "./types.ts";
+import { DEFAULT_GRID } from "./types.ts";
+import { uid } from "./ids.ts";
 
 /** GDevelop keeps the base layer name untranslated in the project file. */
 export const BASE_LAYER_NAME = "Base layer";
