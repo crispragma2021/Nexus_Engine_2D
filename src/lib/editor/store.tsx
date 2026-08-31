@@ -30,6 +30,17 @@ import {
 } from "./scenes";
 import { newNameGenerator, uid } from "./ids";
 import { applyAiEditPlan, createAiEditPlan } from "./ai";
+import {
+  createAgentSession,
+  makeAuditEntry,
+  setAgentMode,
+  setAgentSnapshotMode,
+  withAuditEntry,
+  type AgentAuditEntry,
+  type AgentSessionState,
+  type AutonomyMode,
+  type SnapshotMode,
+} from "../agent/session";
 
 export type EditorTab = "scene" | "events";
 
@@ -125,6 +136,8 @@ interface UIState {
   commandPaletteOpen: boolean;
   /** Contextual hybrid automation bar (Ctrl/Cmd+K). */
   quickAutomationOpen: boolean;
+  /** Agent panel (plan → approve → apply → preview → diagnostics). */
+  agentPanelOpen: boolean;
   inlineAi: InlineAiSession | null;
   previewOpen: boolean;
   previewWithDebugger: boolean;
@@ -163,6 +176,17 @@ type Action =
       scene: GDScene;
       selectedInstanceIds?: string[];
     }
+  // agent session (plan → approve → atomic transaction → preview → diagnostics)
+  | {
+      type: "applyAgentPlan";
+      project: GDProject;
+      agent: AgentSessionState;
+      /** Scene to focus after the transaction (plan target scene). */
+      sceneName?: string;
+    }
+  | { type: "agentAudit"; entry: AgentAuditEntry }
+  | { type: "agentSetMode"; mode: AutonomyMode }
+  | { type: "agentSetSnapshotMode"; mode: SnapshotMode }
   // objects
   | { type: "addObject"; object: Partial<GDObjectDef> & { name: string; type: string } }
   | { type: "updateObject"; id: string; patch: Partial<GDObjectDef> }
@@ -317,8 +341,10 @@ interface State {
   project: GDProject;
   activeSceneName: string;
   ui: UIState;
-  past: { project: GDProject; sceneName: string }[];
-  future: { project: GDProject; sceneName: string }[];
+  /** Agent session: memory, autonomy mode, snapshots and audit log. */
+  agent: AgentSessionState;
+  past: { project: GDProject; sceneName: string; agent: AgentSessionState }[];
+  future: { project: GDProject; sceneName: string; agent: AgentSessionState }[];
   /** dirty flag, drives the unsaved dot in the titlebar */
   dirty: boolean;
 }
@@ -350,6 +376,7 @@ const initialUI: UIState = {
   projectManagerOpen: false,
   commandPaletteOpen: false,
   quickAutomationOpen: false,
+  agentPanelOpen: false,
   inlineAi: null,
   previewOpen: false,
   previewWithDebugger: false,
@@ -562,6 +589,7 @@ const MUTATING = new Set([
   "renameScene",
   "duplicateScene",
   "applyAiEdit",
+  "applyAgentPlan",
 ]);
 
 function effectsOf(target: EffectTarget, scene: GDScene): GDEffect[] | undefined {
@@ -1969,11 +1997,63 @@ function reducer(state: State, action: Action): State {
           openedTabs: [{ id: `scene:${first}`, kind: "scene", label: first, sceneName: first }],
           activeTabId: `scene:${first}`,
         },
+        agent: createAgentSession(migrated),
         past: [],
         future: [],
         dirty: false,
       };
     }
+
+    case "applyAgentPlan": {
+      if (action.agent === state.agent && action.project === state.project) return state;
+      let openedTabs = state.ui.openedTabs;
+      let activeTabId = state.ui.activeTabId;
+      let activeSceneName = state.activeSceneName;
+      const sceneName = action.sceneName;
+      if (
+        sceneName &&
+        action.project.scenes.some((candidate) => candidate.name === sceneName) &&
+        sceneName !== state.activeSceneName
+      ) {
+        const id = `scene:${sceneName}`;
+        if (!state.ui.openedTabs.some((tab) => tab.id === id)) {
+          openedTabs = [
+            ...state.ui.openedTabs,
+            { id, kind: "scene" as const, label: sceneName, sceneName },
+          ];
+        }
+        activeSceneName = sceneName;
+        activeTabId = id;
+      }
+      return {
+        ...state,
+        project: action.project,
+        agent: action.agent,
+        activeSceneName,
+        dirty: action.project !== state.project ? true : state.dirty,
+        ui: {
+          ...state.ui,
+          openedTabs,
+          activeTabId,
+          selectedInstanceIds: [],
+          selectedObjectIds: [],
+        },
+        past: [
+          ...state.past,
+          { project: state.project, sceneName: state.activeSceneName, agent: state.agent },
+        ].slice(-60),
+        future: [],
+      };
+    }
+
+    case "agentAudit":
+      return { ...state, agent: withAuditEntry(state.agent, action.entry) };
+
+    case "agentSetMode":
+      return { ...state, agent: setAgentMode(state.agent, action.mode) };
+
+    case "agentSetSnapshotMode":
+      return { ...state, agent: setAgentSnapshotMode(state.agent, action.mode) };
 
     case "undo": {
       const prev = state.past[state.past.length - 1];
@@ -1982,9 +2062,10 @@ function reducer(state: State, action: Action): State {
         ...state,
         project: prev.project,
         activeSceneName: prev.sceneName,
+        agent: prev.agent,
         past: state.past.slice(0, -1),
         future: [
-          { project: state.project, sceneName: state.activeSceneName },
+          { project: state.project, sceneName: state.activeSceneName, agent: state.agent },
           ...state.future,
         ].slice(0, 60),
         dirty: true,
@@ -1998,9 +2079,11 @@ function reducer(state: State, action: Action): State {
         ...state,
         project: next.project,
         activeSceneName: next.sceneName,
-        past: [...state.past, { project: state.project, sceneName: state.activeSceneName }].slice(
-          -60,
-        ),
+        agent: next.agent,
+        past: [
+          ...state.past,
+          { project: state.project, sceneName: state.activeSceneName, agent: state.agent },
+        ].slice(-60),
         future: state.future.slice(1),
         dirty: true,
       };
@@ -2015,7 +2098,10 @@ function reducer(state: State, action: Action): State {
       return {
         ...nextProject,
         past: record
-          ? [...state.past, { project: state.project, sceneName: state.activeSceneName }].slice(-60)
+          ? [
+              ...state.past,
+              { project: state.project, sceneName: state.activeSceneName, agent: state.agent },
+            ].slice(-60)
           : nextProject.past,
         future: record ? [] : nextProject.future,
       };
@@ -2036,6 +2122,8 @@ interface Ctx {
   /** kind of the document tab currently focused ("scene" | "home" | ...) */
   activeTabKind: OpenedTabKind;
   ui: UIState;
+  /** Agent session state (memory, autonomy mode, snapshots, audit). */
+  agent: AgentSessionState;
   dispatch: React.Dispatch<Action>;
   applyInlineAiPrompt: (prompt: string, targetName?: string) => Promise<string>;
   canUndo: boolean;
@@ -2052,6 +2140,7 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
       project,
       activeSceneName: project.scenes[0]?.name ?? "Level 1",
       ui: initialUI,
+      agent: createAgentSession(project),
       past: [],
       future: [],
       dirty: false,
@@ -2094,6 +2183,13 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
           ? { selectedInstanceIds: applied.selectedInstanceIds }
           : {}),
       });
+      // The in-situ edit uses its own validated pipeline, but the session
+      // memory records every AI change so the agent panel shows the whole
+      // picture. Its undo is the editor's regular undo, not a plan rollback.
+      dispatch({
+        type: "agentAudit",
+        entry: makeAuditEntry("applied", `Edición in-situ IA: ${plan.summary}`),
+      });
       return plan.summary;
     },
     [state],
@@ -2109,6 +2205,7 @@ export function EditorProvider({ children }: { children: React.ReactNode }) {
       activeSceneName: state.activeSceneName,
       activeTabKind: activeTab?.kind ?? "scene",
       ui: state.ui,
+      agent: state.agent,
       dispatch,
       applyInlineAiPrompt,
       canUndo: state.past.length > 0,

@@ -12,6 +12,10 @@ import {
 import { toast } from "sonner";
 import { useEditor } from "@/lib/editor/store";
 import { compileIntentToEvents } from "@/lib/editor/ai-logic";
+import { eventsToAgentPlan } from "@/lib/agent/planner";
+import { TOOL_REGISTRY } from "@/lib/agent/tools";
+import type { AgentPlan } from "@/lib/agent/operations";
+import { useAgentCommit } from "./hooks/use-agent-commit";
 import { uid } from "@/lib/editor/ids";
 import {
   playSfxr,
@@ -61,9 +65,12 @@ const MODES: {
 
 export function QuickAutomationBar() {
   const { project, scene, ui, dispatch } = useEditor();
+  const { needsApproval, commit, audit } = useAgentCommit();
   const [mode, setMode] = React.useState<AutomationMode>("event");
   const [prompt, setPrompt] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  /** Event plan waiting for approval (Supervised mode) inside the bar. */
+  const [pendingPlan, setPendingPlan] = React.useState<AgentPlan | null>(null);
   const [providerName, setProviderName] = React.useState<ProviderName>("huggingface");
   const [token, setToken] = React.useState("");
   const [model, setModel] = React.useState("");
@@ -74,8 +81,36 @@ export function QuickAutomationBar() {
 
   const close = React.useCallback(() => {
     setToken("");
+    if (pendingPlan) {
+      audit(
+        "cancelled",
+        `Plan de evento descartado al cerrar: ${pendingPlan.summary}`,
+        pendingPlan.id,
+      );
+    }
+    setPendingPlan(null);
     dispatch({ type: "ui", patch: { quickAutomationOpen: false } });
-  }, [dispatch]);
+  }, [dispatch, pendingPlan, audit]);
+
+  const approvePending = () => {
+    if (!pendingPlan) return;
+    const result = commit(pendingPlan);
+    setPendingPlan(null);
+    if (result.ok) {
+      toast.success("Evento añadido a la hoja visual. Puedes editarlo, moverlo o borrarlo.");
+      setPrompt("");
+      close();
+    } else {
+      toast.error(result.error ?? "El plan no se pudo aplicar.");
+    }
+  };
+
+  const cancelPending = () => {
+    if (pendingPlan) {
+      audit("cancelled", `Plan de evento descartado: ${pendingPlan.summary}`, pendingPlan.id);
+    }
+    setPendingPlan(null);
+  };
 
   React.useEffect(() => {
     if (open) window.setTimeout(() => inputRef.current?.focus(), 0);
@@ -157,6 +192,9 @@ export function QuickAutomationBar() {
     setBusy(true);
     try {
       if (mode === "event") {
+        // The compiled events go through the agent pipeline like everything
+        // else: plan → approval gated by the session's autonomy mode →
+        // atomic, undoable transaction (never a direct store dispatch).
         const events = compileIntentToEvents(prompt, {
           objectNames: scene.objects.map((object) => object.name),
           sceneNames: project.scenes.map((entry) => entry.name),
@@ -165,10 +203,23 @@ export function QuickAutomationBar() {
             .map((resource) => resource.name),
           activeLayer: scene.activeLayer,
         });
-        dispatch({ type: "insertGeneratedEvents", events });
-        toast.success("Evento añadido a la hoja visual. Puedes editarlo, moverlo o borrarlo.");
-        setPrompt("");
-        close();
+        const plan = eventsToAgentPlan(events, scene.name, prompt.slice(0, 80));
+        if (pendingPlan) {
+          audit("cancelled", `Plan de evento reemplazado: ${pendingPlan.summary}`, pendingPlan.id);
+        }
+        if (needsApproval(plan)) {
+          setPendingPlan(plan);
+          return;
+        }
+        const result = commit(plan);
+        if (result.ok) {
+          toast.success("Evento añadido a la hoja visual. Puedes editarlo, moverlo o borrarlo.");
+          setPrompt("");
+          close();
+        } else {
+          toast.error(result.error ?? "El plan no se pudo aplicar.");
+        }
+        return;
       } else {
         const provider = imageProvider(providerName, token, model, accountId, endpoint);
         const generated = await generateImageAsset(provider, {
@@ -306,7 +357,10 @@ export function QuickAutomationBar() {
               type="button"
               aria-label={entry.label}
               title={entry.label}
-              onClick={() => setMode(entry.id)}
+              onClick={() => {
+                setMode(entry.id);
+                setPendingPlan(null);
+              }}
               className={cn(
                 "flex items-center gap-1 rounded px-2 py-1 text-[11px] text-text-secondary hover:bg-elevated hover:text-foreground",
                 mode === entry.id && "bg-[#494952] text-[#F6F2FF]",
@@ -416,29 +470,69 @@ export function QuickAutomationBar() {
               Abrir edición in-situ en la selección o el cursor
             </button>
           ) : (
-            <div className="flex items-center gap-1 rounded-lg border border-separator bg-[#101017] p-1 focus-within:border-[#6868E8]">
-              <input
-                ref={inputRef}
-                value={prompt}
-                onChange={(event) => setPrompt(event.target.value)}
-                maxLength={600}
-                disabled={busy}
-                placeholder={placeholderFor(mode)}
-                className="min-w-0 flex-1 bg-transparent px-2 py-1.5 text-[12.5px] text-foreground outline-none placeholder:text-text-placeholder disabled:opacity-60"
-              />
-              <button
-                type="submit"
-                disabled={!prompt.trim() || busy || (mode === "sprite" && !token.trim())}
-                className="grid h-8 w-8 shrink-0 place-items-center rounded bg-primary text-primary-foreground hover:bg-[#5C36D6] disabled:bg-elevated disabled:text-text-placeholder"
-                aria-label="Ejecutar automatización"
-              >
-                {busy ? (
-                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                ) : (
-                  <Send className="h-3.5 w-3.5" />
-                )}
-              </button>
-            </div>
+            <>
+              {mode === "event" && pendingPlan ? (
+                <div className="mb-2 rounded-lg border border-[#6868E8]/60 bg-[#101017] p-2">
+                  <p className="text-[11px] font-medium text-[#CFC8FF]">{pendingPlan.summary}</p>
+                  <ul className="mb-1.5 mt-1 space-y-0.5">
+                    {pendingPlan.operations.map((operation, index) => (
+                      <li
+                        key={`${operation.type}-${index}`}
+                        className="text-[10.5px] text-text-secondary"
+                      >
+                        • {TOOL_REGISTRY[operation.type]?.label ?? operation.type}
+                        <span className="ml-1 text-text-placeholder">
+                          {JSON.stringify(operation.payload).slice(0, 80)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mb-1.5 text-[10px] text-text-secondary">
+                    Modo supervisado: revisa el plan. Se aplica como transacción atómica con
+                    deshacer disponible.
+                  </p>
+                  <div className="flex gap-1.5">
+                    <button
+                      type="button"
+                      onClick={approvePending}
+                      className="rounded bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground hover:bg-[#5C36D6]"
+                    >
+                      Aplicar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cancelPending}
+                      className="rounded border border-separator px-2.5 py-1 text-[11px] text-foreground hover:bg-elevated"
+                    >
+                      Descartar
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+              <div className="flex items-center gap-1 rounded-lg border border-separator bg-[#101017] p-1 focus-within:border-[#6868E8]">
+                <input
+                  ref={inputRef}
+                  value={prompt}
+                  onChange={(event) => setPrompt(event.target.value)}
+                  maxLength={600}
+                  disabled={busy}
+                  placeholder={placeholderFor(mode)}
+                  className="min-w-0 flex-1 bg-transparent px-2 py-1.5 text-[12.5px] text-foreground outline-none placeholder:text-text-placeholder disabled:opacity-60"
+                />
+                <button
+                  type="submit"
+                  disabled={!prompt.trim() || busy || (mode === "sprite" && !token.trim())}
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded bg-primary text-primary-foreground hover:bg-[#5C36D6] disabled:bg-elevated disabled:text-text-placeholder"
+                  aria-label="Ejecutar automatización"
+                >
+                  {busy ? (
+                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  ) : (
+                    <Send className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              </div>
+            </>
           )}
         </div>
       </form>

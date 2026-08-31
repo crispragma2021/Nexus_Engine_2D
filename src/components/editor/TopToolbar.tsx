@@ -4,6 +4,7 @@
 
 import { useState } from "react";
 import {
+  Bot,
   ChevronDown,
   ClipboardCopy,
   ClipboardPaste,
@@ -285,6 +286,13 @@ export function TopToolbar() {
           }
         >
           <Sparkles className="h-4 w-4" />
+        </IconButton>
+        <IconButton
+          label="Panel del agente (planos validados, transacción atómica)"
+          active={ui.agentPanelOpen}
+          onClick={() => dispatch({ type: "ui", patch: { agentPanelOpen: !ui.agentPanelOpen } })}
+        >
+          <Bot className="h-4 w-4" />
         </IconButton>
         <Sep />
 

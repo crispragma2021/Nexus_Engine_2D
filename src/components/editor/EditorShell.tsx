@@ -29,6 +29,7 @@ import { PreviewDialog } from "./PreviewDialog";
 import { ProjectManagerDrawer } from "./ProjectManagerDrawer";
 import { InlineAiPrompt } from "./InlineAiPrompt";
 import { QuickAutomationBar } from "./QuickAutomationBar";
+import { AgentPanel } from "./AgentPanel";
 import { useEditorShortcuts } from "./hooks/use-editor-shortcuts";
 import * as React from "react";
 import { toast } from "sonner";
@@ -227,6 +228,7 @@ function Body() {
       </main>
       <MobileBottomBar />
       <QuickAutomationBar />
+      <AgentPanel />
 
       {/* dialogs */}
       <NewObjectDialog />

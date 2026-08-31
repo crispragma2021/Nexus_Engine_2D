@@ -21,7 +21,7 @@ export function useEditorShortcuts() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (ui.dialog || ui.previewOpen || ui.projectManagerOpen) return;
+      if (ui.dialog || ui.previewOpen || ui.projectManagerOpen || ui.agentPanelOpen) return;
       const ctrl = event.ctrlKey || event.metaKey;
       const key = event.key;
 
