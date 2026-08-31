@@ -6,7 +6,7 @@
 // transaction, and nothing is ever published automatically.
 
 import * as React from "react";
-import { Bot, ChevronDown, Play, RotateCcw, Send, Sparkles, Trash2, X } from "lucide-react";
+import { Bot, ChevronDown, Cpu, Play, RotateCcw, Send, Sparkles, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { useEditor } from "@/lib/editor/store";
 import { validatePlan } from "@/lib/agent/validator";
@@ -16,6 +16,7 @@ import {
   type AutonomyMode,
   type SnapshotMode,
 } from "@/lib/agent/session";
+import { planFromModel } from "@/lib/agent/model";
 import { TOOL_REGISTRY } from "@/lib/agent/tools";
 import type { AgentPlan } from "@/lib/agent/operations";
 import { useAgentCommit } from "./hooks/use-agent-commit";
@@ -37,6 +38,8 @@ interface PanelMessage {
   plan?: AgentPlan;
   /** true while a plan message still shows its approve/cancel buttons */
   pending?: boolean;
+  /** The prompt to rerun with the local deterministic planner. */
+  retryPrompt?: string;
 }
 
 let messageId = 0;
@@ -57,12 +60,20 @@ const AUTONOMY_HINTS: Record<AutonomyMode, string> = {
 };
 
 export function AgentPanel() {
-  const { ui, project, agent, dispatch } = useEditor();
+  const { ui, project, agent, activeSceneName, dispatch } = useEditor();
   const { planFromPrompt, needsApproval, commit, undoPlan, restoreBaseline, audit } =
     useAgentCommit();
   const [draft, setDraft] = React.useState("");
   const [messages, setMessages] = React.useState<PanelMessage[]>([]);
   const [showAudit, setShowAudit] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  /** Optional remote model (OpenAI-compatible). Per-session only: the token
+   *  is never persisted, only used in the outgoing request (same pattern as
+   *  the sprite-generation flow). */
+  const [showModelConfig, setShowModelConfig] = React.useState(false);
+  const [endpoint, setEndpoint] = React.useState("");
+  const [modelName, setModelName] = React.useState("");
+  const [token, setToken] = React.useState("");
   const inputRef = React.useRef<HTMLInputElement>(null);
   const bottomRef = React.useRef<HTMLDivElement>(null);
   const open = ui.agentPanelOpen;
@@ -88,6 +99,7 @@ export function AgentPanel() {
   }, [open, dispatch]);
 
   const close = React.useCallback(() => {
+    setToken("");
     dispatch({ type: "ui", patch: { agentPanelOpen: false } });
   }, [dispatch]);
 
@@ -131,67 +143,122 @@ export function AgentPanel() {
     [commit],
   );
 
-  const onSubmit = (event: React.FormEvent) => {
+  /** Shared approval flow for a candidate plan (local or model produced). */
+  const presentPlan = React.useCallback(
+    (plan: AgentPlan) => {
+      dismissPending();
+      const operations: PanelOperation[] = plan.operations.map((operation) => ({
+        type: operation.type,
+        label: TOOL_REGISTRY[operation.type]?.label ?? operation.type,
+        payload: JSON.stringify(operation.payload).slice(0, 90),
+      }));
+
+      if (!needsApproval(plan)) {
+        const outcome = runPlan(plan);
+        pushMessages([
+          {
+            role: "agent",
+            kind: outcome.kind,
+            lines: outcome.lines,
+            ...(outcome.text ? { text: outcome.text } : {}),
+          },
+        ]);
+        return;
+      }
+
+      const validation = validatePlan(plan, project);
+      if (!validation.ok) {
+        pushMessages([
+          {
+            role: "agent",
+            kind: "rejected",
+            text: "El plan no pasó la validación; el proyecto no cambió:",
+            lines: validation.errors.map((error) => error.message),
+          },
+        ]);
+        return;
+      }
+      pushMessages([
+        {
+          role: "agent",
+          kind: "plan",
+          pending: true,
+          plan,
+          operations,
+          text:
+            agent.mode === "Supervised"
+              ? "Revisa el plan antes de aplicarlo:"
+              : "Plan con cambios destructivos — revísalo antes de aplicarlo:",
+        },
+      ]);
+    },
+    [dismissPending, needsApproval, runPlan, pushMessages, project, agent.mode],
+  );
+
+  /** Deterministic planner path (no remote model involved). */
+  const runDeterministic = React.useCallback(
+    (prompt: string) => {
+      const proposal = planFromPrompt(prompt);
+      if (!proposal.plan) {
+        pushMessages([
+          {
+            role: "agent",
+            kind: "info",
+            text: proposal.reason ?? "No pude generar un plan seguro.",
+          },
+        ]);
+        return;
+      }
+      presentPlan(proposal.plan);
+    },
+    [planFromPrompt, pushMessages, presentPlan],
+  );
+
+  const onSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     const prompt = draft.trim();
-    if (!prompt) return;
+    if (!prompt || busy) return;
     setDraft("");
     pushMessages([{ role: "user", kind: "info", text: prompt }]);
 
-    const proposal = planFromPrompt(prompt);
-    if (!proposal.plan) {
-      pushMessages([
-        { role: "agent", kind: "info", text: proposal.reason ?? "No pude generar un plan seguro." },
-      ]);
+    if (!endpoint.trim().startsWith("http")) {
+      runDeterministic(prompt);
       return;
     }
 
-    dismissPending();
-    const plan = proposal.plan;
-    const operations: PanelOperation[] = plan.operations.map((operation) => ({
-      type: operation.type,
-      label: TOOL_REGISTRY[operation.type]?.label ?? operation.type,
-      payload: JSON.stringify(operation.payload).slice(0, 90),
-    }));
-
-    if (!needsApproval(plan)) {
-      const outcome = runPlan(plan);
-      pushMessages([
-        {
-          role: "agent",
-          kind: outcome.kind,
-          lines: outcome.lines,
-          ...(outcome.text ? { text: outcome.text } : {}),
+    // Remote model path: the model only proposes a candidate plan; the same
+    // validation + approval gates apply before anything touches the project.
+    setBusy(true);
+    try {
+      const result = await planFromModel({
+        instruction: prompt,
+        project,
+        activeSceneName,
+        provider: {
+          endpoint: endpoint.trim(),
+          ...(modelName.trim() ? { model: modelName.trim() } : {}),
+          ...(token.trim() ? { token: token.trim() } : {}),
         },
-      ]);
-      return;
+      });
+      if (result.plan) {
+        presentPlan(result.plan);
+      } else {
+        pushMessages([
+          {
+            role: "agent",
+            kind: "info",
+            text: `El modelo de IA no pudo generar un plan: ${result.reason ?? "error desconocido."}`,
+            retryPrompt: prompt,
+          },
+        ]);
+      }
+    } finally {
+      setBusy(false);
     }
+  };
 
-    const validation = validatePlan(plan, project);
-    if (!validation.ok) {
-      pushMessages([
-        {
-          role: "agent",
-          kind: "rejected",
-          text: "El plan no pasó la validación; el proyecto no cambió:",
-          lines: validation.errors.map((error) => error.message),
-        },
-      ]);
-      return;
-    }
-    pushMessages([
-      {
-        role: "agent",
-        kind: "plan",
-        pending: true,
-        plan,
-        operations,
-        text:
-          agent.mode === "Supervised"
-            ? "Revisa el plan antes de aplicarlo:"
-            : "Plan con cambios destructivos — revísalo antes de aplicarlo:",
-      },
-    ]);
+  const retryLocal = (prompt: string) => {
+    runDeterministic(prompt);
   };
 
   const approve = (message: PanelMessage) => {
@@ -275,8 +342,10 @@ export function AgentPanel() {
               <li>«Cuando Jugador colisiona con Moneda, destruye Moneda»</li>
             </ul>
             <p className="mt-2 text-[10.5px]">
-              Todo pasa por validación y se aplica como transacción atómica con deshacer. El agente
-              nunca publica nada automáticamente.
+              Todo pasa por validación y se aplica como transacción atómica con deshacer. Sin
+              endpoint de IA configurado, usa el planificador determinista local; con uno, el modelo
+              solo propone planes (nunca toca el proyecto directamente). El agente no publica nada
+              automáticamente.
             </p>
           </div>
         ) : (
@@ -288,6 +357,7 @@ export function AgentPanel() {
                 onApprove={approve}
                 onCancel={cancel}
                 onPreview={() => dispatch({ type: "ui", patch: { previewOpen: true } })}
+                onRetryLocal={retryLocal}
               />
             ))}
             <div ref={bottomRef} />
@@ -376,9 +446,65 @@ export function AgentPanel() {
         ) : null}
       </div>
 
+      {/* optional remote model config */}
+      <div className="shrink-0 border-t border-separator">
+        <button
+          type="button"
+          onClick={() => setShowModelConfig((value) => !value)}
+          className="flex w-full items-center gap-1 px-3 py-1.5 text-[10.5px] text-text-secondary hover:bg-elevated hover:text-foreground"
+        >
+          <Cpu className="h-3 w-3" />
+          Modelo de IA
+          <span
+            className={cn(
+              endpoint.trim().startsWith("http") ? "text-emerald-400" : "text-text-placeholder",
+            )}
+          >
+            {endpoint.trim().startsWith("http")
+              ? "· activo"
+              : "· sin configurar (usará planificador local)"}
+          </span>
+        </button>
+        {showModelConfig ? (
+          <div className="space-y-1 border-t border-separator px-3 py-2">
+            <p className="text-[9.5px] leading-snug text-text-placeholder">
+              Endpoint compatible con OpenAI (HTTPS). El token solo se usa en la solicitud y no se
+              guarda. Sin endpoint, el agente usa el planificador determinista local.
+            </p>
+            <input
+              value={endpoint}
+              onChange={(event) => setEndpoint(event.target.value)}
+              placeholder="https://…/v1/chat/completions"
+              aria-label="Endpoint del modelo"
+              className="h-7 w-full rounded border border-separator bg-[#25252E] px-2 text-[11px] text-foreground outline-none focus:border-[#6868E8]"
+            />
+            <div className="flex gap-1">
+              <input
+                value={modelName}
+                onChange={(event) => setModelName(event.target.value)}
+                placeholder="Modelo (opcional)"
+                aria-label="Nombre del modelo"
+                className="h-7 w-1/2 rounded border border-separator bg-[#25252E] px-2 text-[11px] text-foreground outline-none focus:border-[#6868E8]"
+              />
+              <input
+                value={token}
+                onChange={(event) => setToken(event.target.value)}
+                type="password"
+                placeholder="Token (opcional)"
+                aria-label="Token del proveedor"
+                autoComplete="off"
+                className="h-7 w-1/2 rounded border border-separator bg-[#25252E] px-2 text-[11px] text-foreground outline-none focus:border-[#6868E8]"
+              />
+            </div>
+          </div>
+        ) : null}
+      </div>
+
       {/* input */}
       <form
-        onSubmit={onSubmit}
+        onSubmit={(event) => {
+          void onSubmit(event);
+        }}
         className="flex shrink-0 items-center gap-1 border-t border-separator bg-[#101017] p-2"
       >
         <input
@@ -386,17 +512,22 @@ export function AgentPanel() {
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
           maxLength={600}
+          disabled={busy}
           placeholder="Ej.: crea la escena Nivel 2 y añade la variable puntos"
           aria-label="Instrucción para el agente"
-          className="min-w-0 flex-1 rounded-lg border border-separator bg-[#17171F] px-2 py-1.5 text-[12px] text-foreground outline-none placeholder:text-text-placeholder focus:border-[#6868E8]"
+          className="min-w-0 flex-1 rounded-lg border border-separator bg-[#17171F] px-2 py-1.5 text-[12px] text-foreground outline-none placeholder:text-text-placeholder focus:border-[#6868E8] disabled:opacity-60"
         />
         <button
           type="submit"
-          disabled={!draft.trim()}
-          aria-label="Enviar instrucción al agente"
+          disabled={!draft.trim() || busy}
+          aria-label={busy ? "Consultando el modelo de IA" : "Enviar instrucción al agente"}
           className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-primary text-primary-foreground hover:bg-[#5C36D6] disabled:bg-elevated disabled:text-text-placeholder"
         >
-          <Send className="h-3.5 w-3.5" />
+          {busy ? (
+            <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          ) : (
+            <Send className="h-3.5 w-3.5" />
+          )}
         </button>
       </form>
     </aside>
@@ -408,11 +539,13 @@ function PanelMessageView({
   onApprove,
   onCancel,
   onPreview,
+  onRetryLocal,
 }: {
   message: PanelMessage;
   onApprove: (message: PanelMessage) => void;
   onCancel: (message: PanelMessage) => void;
   onPreview: () => void;
+  onRetryLocal: (prompt: string) => void;
 }) {
   if (message.role === "user") {
     return (
@@ -497,6 +630,16 @@ function PanelMessageView({
               >
                 <Play className="h-3 w-3" />
                 Vista previa del resultado
+              </button>
+            ) : null}
+            {message.retryPrompt ? (
+              <button
+                type="button"
+                onClick={() => onRetryLocal(message.retryPrompt!)}
+                className="mt-1.5 flex items-center gap-1 rounded border border-separator px-2 py-0.5 text-[10.5px] text-foreground hover:bg-elevated"
+              >
+                <RotateCcw className="h-3 w-3" />
+                Intentar con el planificador local
               </button>
             ) : null}
           </>
