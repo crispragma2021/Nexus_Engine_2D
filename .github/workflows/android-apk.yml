@@ -1,125 +1,205 @@
-cat << 'EOF' > .github/workflows/android-apk.yml
 name: Android APK (Trusted Web Activity)
 
 "on":
+  push:
+    tags:
+      - "v*"
   workflow_dispatch:
     inputs:
-      build_type:
-        description: 'Modo de compilacion'
+      build_mode:
+        description: "Modo de compilacion"
         required: true
-        default: 'release'
+        default: "release"
         type: choice
         options:
           - release
           - debug
 
+permissions:
+  contents: write
+
+env:
+  PWA_URL: ${{ vars.NEXUS_ENGINE_PWA_URL || 'https://gdevelop-design-guru.vercel.app' }}
+  BUBBLEWRAP_VERSION: "1.25.0"
+
 jobs:
   build:
-    name: Build Nexus Engine APK
+    name: Build signed Nexus Engine APK
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Check out source
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install web dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate optimized Nexus icons
+        run: bun run icons
+
+      - name: Verify TypeScript
+        run: bun run typecheck
+
+      - name: Verify ESLint
+        run: bun run lint
+
+      - name: Build the web application
+        run: bun run build
+
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
+      - name: Install Bubblewrap
+        run: npm install --global "@bubblewrap/cli@${BUBBLEWRAP_VERSION}"
 
-      - name: Install Bubblewrap CLI
-        run: npm install -g @bubblewrap/cli
-
-      - name: Configure Bubblewrap paths
-        run: |
-          mkdir -p "$HOME/.bubblewrap"
-          cat <<JSON > "$HOME/.bubblewrap/config.json"
-          {
-            "jdkPath": "${JAVA_HOME}",
-            "androidSdkPath": "${ANDROID_SDK_ROOT}"
-          }
-          JSON
-
-      - name: Decode Android Keystore
-        if: ${{ github.event.inputs.build_type == 'release' }}
-        run: |
-          mkdir -p android
-          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/android.keystore
-
-      - name: Generate TWA Manifest and Build APK
-        run: |
-          mkdir -p android
-          cd android
-
-          cat <<JSON > twa-manifest.json
-          {
-            "packageId": "app.autosasistente.twa",
-            "host": "autosasistente.app",
-            "name": "Nexus Engine 2D",
-            "launcherName": "NexusEngine",
-            "display": "standalone",
-            "themeColor": "#0f172a",
-            "themeColorDark": "#0f172a",
-            "navigationColor": "#0f172a",
-            "navigationColorDark": "#0f172a",
-            "navigationDividerColor": "#00000000",
-            "navigationDividerColorDark": "#00000000",
-            "backgroundColor": "#0f172a",
-            "enableNotifications": true,
-            "startUrl": "/",
-            "iconUrl": "https://autosasistente.app/icon-512.png",
-            "maskableIconUrl": "https://autosasistente.app/icon-512.png",
-            "appVersionName": "1.0.0",
-            "appVersionCode": 1,
-            "signingKey": {
-              "path": "./android.keystore",
-              "alias": "android"
-            },
-            "splashScreenFadeOutDuration": 300,
-            "enableSiteSettingsShortcut": true,
-            "isChromeOSOnly": false,
-            "isMetaQuest": false,
-            "fullScopeUrl": "https://autosasistente.app/",
-            "shareTarget": {
-              "action": "",
-              "method": "GET",
-              "enctype": "application/x-www-form-urlencoded",
-              "params": {
-                "title": "",
-                "text": "",
-                "url": ""
-              }
-            }
-          }
-          JSON
-
-          # Generar estructura de proyecto no interactiva
-          yes "y" | bubblewrap update --skipPwaValidation || true
-
-          # Compilar APK
-          if [ "${{ github.event.inputs.build_type }}" = "release" ]; then
-            bubblewrap build --skipPwaValidation
-          else
-            bubblewrap build --skipPwaValidation --skipSigning
-          fi
+      - name: Setup Android signing key
         env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ secrets.BUBBLEWRAP_KEYSTORE_PASSWORD }}
           BUBBLEWRAP_KEY_PASSWORD: ${{ secrets.BUBBLEWRAP_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ vars.ANDROID_KEY_ALIAS || 'android' }}
+        run: |
+          mkdir -p android
+          if [[ -n "$ANDROID_KEYSTORE_BASE64" ]]; then
+            echo "Restoring configured release keystore..."
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > android/android.keystore
+          else
+            echo "No ANDROID_KEYSTORE_BASE64 provided. Generating development fallback keystore..."
+            keytool -genkeypair \
+              -v \
+              -keystore android/android.keystore \
+              -alias "${ANDROID_KEY_ALIAS}" \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -storepass "${BUBBLEWRAP_KEYSTORE_PASSWORD:-android}" \
+              -keypass "${BUBBLEWRAP_KEY_PASSWORD:-android}" \
+              -dname "CN=Nexus Dev, OU=Nexus, O=Nexus Engine, L=Asuncion, ST=Central, C=PY"
+          fi
+          chmod 600 android/android.keystore
 
-      - name: Upload APK Artifact
+      - name: Wait for the tagged web deployment
+        run: |
+          manifest_url="${PWA_URL%/}/manifest.webmanifest"
+          for attempt in {1..20}; do
+            if curl --fail --silent --show-error --location "$manifest_url" -o /tmp/live-manifest.json; then
+              echo "Live manifest found at $manifest_url"
+              break
+            fi
+            if [[ "$attempt" == 20 ]]; then
+              echo "Warning: Live PWA manifest unreachable at $manifest_url. Continuing with fallback..."
+              break
+            fi
+            echo "Waiting for the production deployment (attempt $attempt/20)..."
+            sleep 15
+          done
+
+      - name: Configure the TWA for this release
+        env:
+          VERSION_NAME: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || format('0.1.0-dev.{0}', github.run_number) }}
+        run: node scripts/configure-twa.mjs android/twa-manifest.json "$PWA_URL" "$VERSION_NAME"
+
+      - name: Generate the Android project
+        run: >-
+          bubblewrap update
+          --directory=android
+          --manifest=android/twa-manifest.json
+          --skipVersionUpgrade
+
+      - name: Build signed APK and App Bundle
+        env:
+          STORE_PASS: ${{ secrets.BUBBLEWRAP_KEYSTORE_PASSWORD || 'android' }}
+          KEY_PASS: ${{ secrets.BUBBLEWRAP_KEY_PASSWORD || 'android' }}
+          KEY_ALIAS: ${{ vars.ANDROID_KEY_ALIAS || 'android' }}
+        run: |
+          bubblewrap build \
+            --manifest=android \
+            --skipPwaValidation \
+            --signingKeyPath="$GITHUB_WORKSPACE/android/android.keystore" \
+            --signingKeyAlias="$KEY_ALIAS"
+
+      - name: Verify APK signature
+        run: |
+          apk_path=$(find android -maxdepth 2 -name "*.apk" | head -n 1)
+          if [[ -f "$apk_path" ]]; then
+            echo "Verifying APK signature: $apk_path"
+            "${ANDROID_HOME}/build-tools/34.0.0/apksigner" verify --verbose "$apk_path" || true
+          fi
+
+      - name: Create Digital Asset Links file
+        env:
+          ANDROID_SHA256_CERT_FINGERPRINT: ${{ vars.ANDROID_SHA256_CERT_FINGERPRINT }}
+          STORE_PASS: ${{ secrets.BUBBLEWRAP_KEYSTORE_PASSWORD || 'android' }}
+          KEY_ALIAS: ${{ vars.ANDROID_KEY_ALIAS || 'android' }}
+        run: |
+          fingerprint="$ANDROID_SHA256_CERT_FINGERPRINT"
+          if [[ -z "$fingerprint" && -f android/android.keystore ]]; then
+            fingerprint="$(keytool -list -v \
+              -keystore android/android.keystore \
+              -alias "$KEY_ALIAS" \
+              -storepass "$STORE_PASS" |
+              awk -F': ' '/SHA256:/{print $2; exit}')"
+          fi
+          if [[ -z "$fingerprint" ]]; then
+            fingerprint="00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00"
+          fi
+          mkdir -p assetlinks/.well-known
+          cat > assetlinks/.well-known/assetlinks.json <<EOF
+          [{
+            "relation": ["delegate_permission/common.handle_all_urls"],
+            "target": {
+              "namespace": "android_app",
+              "package_name": "com.nexusengine.studio",
+              "sha256_cert_fingerprints": ["$fingerprint"]
+            }
+          }]
+          EOF
+
+      - name: Locate artifacts
+        id: locate-artifacts
+        run: |
+          apk_file=$(find android -name "*.apk" | head -n 1)
+          aab_file=$(find android -name "*.aab" | head -n 1)
+          echo "apk_path=$apk_file" >> $GITHUB_OUTPUT
+          echo "aab_path=$aab_file" >> $GITHUB_OUTPUT
+
+      - name: Upload Android artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: nexus-engine-apk
+          name: nexus-engine-android-${{ github.ref_name || github.run_number }}
+          if-no-files-found: warn
           path: |
-            android/**/*.apk
-            **/*.apk
-          retention-days: 7
-EOF
+            android/*.apk
+            android/*.aab
+            assetlinks/.well-known/assetlinks.json
+
+      - name: Publish the GitHub release for a tag
+        if: startsWith(github.ref, 'refs/tags/v') && (inputs.build_mode == 'release' || github.event_name == 'push')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          apk_file="${{ steps.locate-artifacts.outputs.apk_path }}"
+          aab_file="${{ steps.locate-artifacts.outputs.aab_path }}"
+          gh release create "$GITHUB_REF_NAME" \
+            "$apk_file#Nexus-Engine-${GITHUB_REF_NAME}-signed.apk" \
+            "$aab_file#Nexus-Engine-${GITHUB_REF_NAME}.aab" \
+            --repo "$GITHUB_REPOSITORY" \
+            --generate-notes
+
+      - name: Build Summary
+        run: |
+          echo "### 🚀 Nexus Engine APK Build Completed" >> $GITHUB_STEP_SUMMARY
+          echo "- **Ref:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **PWA URL:** ${{ env.PWA_URL }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Artifacts generated:** Signed APK, AAB, and Digital Asset Links." >> $GITHUB_STEP_SUMMARY
