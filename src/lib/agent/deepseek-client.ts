@@ -35,7 +35,7 @@ export interface GeneratePlanOptions {
 export async function requestAgentPlan({
   prompt,
   project,
-  apiKey = process.env.DEEPSEEK_API_KEY,
+  apiKey = process.env["DEEPSEEK_API_KEY"],
   model = "deepseek-chat",
 }: GeneratePlanOptions): Promise<{ plan: AgentPlan | null; error?: string }> {
   if (!apiKey) {
