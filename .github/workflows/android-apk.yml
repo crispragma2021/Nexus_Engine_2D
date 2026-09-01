@@ -34,24 +34,15 @@ jobs:
       - name: Install Bubblewrap CLI
         run: npm install -g @bubblewrap/cli
 
-      - name: Preconfigure Bubblewrap CLI paths
+      - name: Configure Bubblewrap Environment
         run: |
           mkdir -p "$HOME/.bubblewrap"
-          
-          # Detectar la ruta exacta del SDK que espera Bubblewrap
-          SDK_PATH="${ANDROID_HOME}/cmdline-tools/latest"
-          if [ ! -d "$SDK_PATH" ]; then
-            SDK_PATH="${ANDROID_HOME}"
-          fi
-
           cat <<EOF > "$HOME/.bubblewrap/config.json"
           {
             "jdkPath": "${JAVA_HOME}",
-            "androidSdkPath": "${SDK_PATH}"
+            "androidSdkPath": "${ANDROID_HOME}"
           }
           EOF
-          echo "Bubblewrap config.json:"
-          cat "$HOME/.bubblewrap/config.json"
 
       - name: Decode Android Keystore
         if: ${{ github.event.inputs.build_type == 'release' }}
@@ -59,25 +50,59 @@ jobs:
           mkdir -p android
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/android.keystore
 
-      - name: Initialize and Build Android App
+      - name: Generate TWA Manifest and Build APK
         run: |
-          PWA_URL="${{ vars.NEXUS_ENGINE_PWA_URL }}"
-          if [ -z "$PWA_URL" ]; then
-            PWA_URL="https://autosasistente.app"
-          fi
-          echo "Generando e inicializando APK para: $PWA_URL"
-
           mkdir -p android
           cd android
 
-          if [ ! -f "twa-manifest.json" ]; then
-            yes "" | bubblewrap init --manifest="${PWA_URL}/manifest.webmanifest" --skipPwaValidation --directory . || true
-          fi
+          # Generar twa-manifest.json estático sin preguntas interactivas
+          cat <<EOF > twa-manifest.json
+          {
+            "packageId": "app.autosasistente.twa",
+            "host": "autosasistente.app",
+            "name": "Nexus Engine 2D",
+            "launcherName": "NexusEngine",
+            "display": "standalone",
+            "themeColor": "#0f172a",
+            "themeColorDark": "#0f172a",
+            "navigationColor": "#0f172a",
+            "navigationColorDark": "#0f172a",
+            "navigationDividerColor": "#00000000",
+            "navigationDividerColorDark": "#00000000",
+            "backgroundColor": "#0f172a",
+            "enableNotifications": true,
+            "startUrl": "/",
+            "iconUrl": "https://autosasistente.app/icon-512.png",
+            "maskableIconUrl": "https://autosasistente.app/icon-512.png",
+            "appVersionName": "1.0.0",
+            "appVersionCode": 1,
+            "signingKey": {
+              "path": "./android.keystore",
+              "alias": "android"
+            },
+            "splashScreenFadeOutDuration": 300,
+            "enableSiteSettingsShortcut": true,
+            "isChromeOSOnly": false,
+            "isMetaQuest": false,
+            "fullScopeUrl": "https://autosasistente.app/",
+            "shareTarget": {
+              "action": "",
+              "method": "GET",
+              "enctype": "application/x-www-form-urlencoded",
+              "params": {
+                "title": "",
+                "text": "",
+                "url": ""
+              }
+            }
+          }
+          EOF
 
+          # Generar proyecto y compilar directamente
           if [ "${{ github.event.inputs.build_type }}" = "release" ]; then
-            yes "" | bubblewrap build --skipPwaValidation
+            bubblewrap build --skipPwaValidation
           else
-            yes "" | bubblewrap build --skipPwaValidation
+            bubblewrap build --skipPwaValidation --skipSigning
           fi
         env:
           BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ secrets.BUBBLEWRAP_KEYSTORE_PASSWORD }}
