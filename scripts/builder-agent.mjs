@@ -85,12 +85,19 @@ const tools = [
     type: "function",
     function: {
       name: "host_tap_normalized",
-      description: "Ejecuta un toque en pantalla usando coordenadas relativas normalizadas (0.0 a 1.0).",
+      description:
+        "Ejecuta un toque en pantalla usando coordenadas relativas normalizadas (0.0 a 1.0).",
       parameters: {
         type: "object",
         properties: {
-          norm_x: { type: "number", description: "Coordenada X relativa (ej. 0.5 para el centro horizontal)" },
-          norm_y: { type: "number", description: "Coordenada Y relativa (ej. 0.5 para el centro vertical)" },
+          norm_x: {
+            type: "number",
+            description: "Coordenada X relativa (ej. 0.5 para el centro horizontal)",
+          },
+          norm_y: {
+            type: "number",
+            description: "Coordenada Y relativa (ej. 0.5 para el centro vertical)",
+          },
         },
         required: ["norm_x", "norm_y"],
       },
@@ -135,11 +142,15 @@ const tools = [
     type: "function",
     function: {
       name: "memory_save",
-      description: "Guarda un hito, resumen de cambios o decisión arquitectónica en la base de datos SQLite.",
+      description:
+        "Guarda un hito, resumen de cambios o decisión arquitectónica en la base de datos SQLite.",
       parameters: {
         type: "object",
         properties: {
-          category: { type: "string", description: "Categoría (ej: architecture, git, tool_added, bugfix)" },
+          category: {
+            type: "string",
+            description: "Categoría (ej: architecture, git, tool_added, bugfix)",
+          },
           summary: { type: "string", description: "Resumen corto de la acción" },
           details: { type: "string", description: "Detalles adicionales opcionales" },
         },
@@ -155,7 +166,10 @@ const tools = [
       parameters: {
         type: "object",
         properties: {
-          limit: { type: "number", description: "Cantidad de registros recientes a consultar (default: 5)" },
+          limit: {
+            type: "number",
+            description: "Cantidad de registros recientes a consultar (default: 5)",
+          },
         },
       },
     },
@@ -164,11 +178,15 @@ const tools = [
     type: "function",
     function: {
       name: "run_project_tests",
-      description: "Ejecuta la suite de tests de TypeScript del motor y el agente interno (src/lib/agent).",
+      description:
+        "Ejecuta la suite de tests de TypeScript del motor y el agente interno (src/lib/agent).",
       parameters: {
         type: "object",
         properties: {
-          test_file: { type: "string", description: "Archivo de test específico (opcional, ej. tests/agent-session.test.ts)" },
+          test_file: {
+            type: "string",
+            description: "Archivo de test específico (opcional, ej. tests/agent-session.test.ts)",
+          },
         },
       },
     },
@@ -248,7 +266,10 @@ async function handleToolCall(fnName, args) {
     }
     if (fnName === "run_project_tests") {
       const target = args.test_file || "tests/agent-*.test.ts";
-      const { stdout, stderr } = await execAsync(`npx vitest run ${target} 2>&1 || npx ts-node --esm ${target} 2>&1 || npm test 2>&1`, { cwd: process.cwd(), timeout: 45000 });
+      const { stdout, stderr } = await execAsync(
+        `npx vitest run ${target} 2>&1 || npx ts-node --esm ${target} 2>&1 || npm test 2>&1`,
+        { cwd: process.cwd(), timeout: 45000 },
+      );
       return (stdout || stderr || "Tests ejecutados.").trim();
     }
     if (fnName === "read_file") {
@@ -263,7 +284,10 @@ async function handleToolCall(fnName, args) {
       return `Archivo ${args.file_path} guardado correctamente.`;
     }
     if (fnName === "execute_shell") {
-      const { stdout, stderr } = await execAsync(args.command, { cwd: process.cwd(), timeout: 30000 });
+      const { stdout, stderr } = await execAsync(args.command, {
+        cwd: process.cwd(),
+        timeout: 30000,
+      });
       return (stdout || stderr || "(Comando finalizado sin salida)").trim();
     }
     return "Herramienta no implementada.";

@@ -4,7 +4,7 @@ import { createAgentSession, evaluateAndApplyPlan } from "../src/lib/agent/sessi
 
 const prompt = process.argv.slice(2).join(" ");
 if (!prompt) {
-  console.error("Uso: node --experimental-transform-types scripts/agent-cli.mjs \"tu instrucción\"");
+  console.error('Uso: node --experimental-transform-types scripts/agent-cli.mjs "tu instrucción"');
   process.exit(1);
 }
 

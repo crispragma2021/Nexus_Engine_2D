@@ -19,13 +19,15 @@ const tools = [
     type: "function",
     function: {
       name: "run_git_command",
-      description: "Ejecuta comandos de git en el repositorio local. Devuelve la salida stdout/stderr.",
+      description:
+        "Ejecuta comandos de git en el repositorio local. Devuelve la salida stdout/stderr.",
       parameters: {
         type: "object",
         properties: {
           command: {
             type: "string",
-            description: "Subcomando de git (ej. 'status -s', 'diff', 'log -n 3 --oneline', 'add .', 'commit -m \"...\"', 'push').",
+            description:
+              "Subcomando de git (ej. 'status -s', 'diff', 'log -n 3 --oneline', 'add .', 'commit -m \"...\"', 'push').",
           },
         },
         required: ["command"],
@@ -36,7 +38,8 @@ const tools = [
     type: "function",
     function: {
       name: "run_github_cli",
-      description: "Ejecuta comandos de GitHub CLI (gh) para consultar o gestionar el repositorio remoto, issues y PRs.",
+      description:
+        "Ejecuta comandos de GitHub CLI (gh) para consultar o gestionar el repositorio remoto, issues y PRs.",
       parameters: {
         type: "object",
         properties: {
@@ -54,7 +57,8 @@ const tools = [
 const messages = [
   {
     role: "system",
-    content: "Eres el agente de desarrollo autónomo para Nexus Engine 2D en Termux. REGLA ESTRICTA: Tienes acceso total a Git y GitHub a través de tus herramientas 'run_git_command' y 'run_github_cli'. Cuando el usuario te pida revisar el repositorio, commits, ramas, diferencias o ejecutar acciones, DEBES invocar la herramienta de inmediato en lugar de darle instrucciones de texto para que él las copie.",
+    content:
+      "Eres el agente de desarrollo autónomo para Nexus Engine 2D en Termux. REGLA ESTRICTA: Tienes acceso total a Git y GitHub a través de tus herramientas 'run_git_command' y 'run_github_cli'. Cuando el usuario te pida revisar el repositorio, commits, ramas, diferencias o ejecutar acciones, DEBES invocar la herramienta de inmediato en lugar de darle instrucciones de texto para que él las copie.",
   },
 ];
 
@@ -136,7 +140,9 @@ rl.on("line", async (line) => {
         const args = JSON.parse(toolCall.function.arguments || "{}");
         let result = "";
 
-        process.stdout.write(`\r\x1b[K\x1b[33m[Ejecutando: ${fnName === "run_git_command" ? "git " : "gh "}${args.command}]\x1b[0m\n`);
+        process.stdout.write(
+          `\r\x1b[K\x1b[33m[Ejecutando: ${fnName === "run_git_command" ? "git " : "gh "}${args.command}]\x1b[0m\n`,
+        );
 
         if (fnName === "run_git_command") {
           result = await executeLocalCommand(`git ${args.command}`);
