@@ -1,0 +1,51 @@
+name: Nexus Autonomous Agent CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  workflow_dispatch:
+    inputs:
+      custom_task:
+        description: "Tarea para el agente"
+        required: false
+        default: "Revisa los tests, tipos y formato del proyecto"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  agent-runner:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Nexus Engine 2D
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Instalar dependencias del proyecto
+        run: npm ci || npm install
+
+      - name: Clonar y compilar agente-nexus
+        run: |
+          git clone https://github.com/crispragma2021/agente-nexus.git /tmp/agente-nexus
+          cd /tmp/agente-nexus
+          cargo build --release
+          sudo cp target/release/autonomous_agent /usr/local/bin/agent
+
+      - name: Ejecutar Agente Autónomo
+        env:
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          DEEPSEEK_BASE_URL: "https://api.deepseek.com"
+          DEEPSEEK_MODEL: "deepseek-chat"
+        run: |
+          TASK="${{ github.event.inputs.custom_task || 'Valida tests, types y formato del proyecto' }}"
+          agent "$TASK"
