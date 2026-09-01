@@ -34,24 +34,43 @@ jobs:
       - name: Install Bubblewrap CLI
         run: npm install -g @bubblewrap/cli
 
+      - name: Configure Bubblewrap Environment
+        run: |
+          mkdir -p ~/.bubblewrap
+          cat << 'EOF' > ~/.bubblewrap/config.json
+          {
+            "jdkPath": "${{ env.JAVA_HOME }}",
+            "androidSdkPath": "${{ env.ANDROID_HOME }}"
+          }
+          EOF
+
       - name: Decode Android Keystore
         if: ${{ github.event.inputs.build_type == 'release' }}
         run: |
           mkdir -p android
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 --decode > android/android.keystore
 
-      - name: Build Android App with Bubblewrap
+      - name: Initialize and Build Android App
         run: |
-          cd android
           PWA_URL="${{ vars.NEXUS_ENGINE_PWA_URL }}"
           if [ -z "$PWA_URL" ]; then
             PWA_URL="https://autosasistente.app"
           fi
-          echo "Compilando APK para: $PWA_URL"
+          echo "Generando e inicializando APK para: $PWA_URL"
+          
+          mkdir -p android
+          cd android
+
+          # Inicializar proyecto Bubblewrap si no existe twa-manifest.json
+          if [ ! -f "twa-manifest.json" ]; then
+            npx @bubblewrap/cli init --manifest="${PWA_URL}/manifest.webmanifest" --skipPwaValidation --directory .
+          fi
+
+          # Compilar APK
           if [ "${{ github.event.inputs.build_type }}" = "release" ]; then
-            bubblewrap build --skipPwaValidation || gradle build
+            npx @bubblewrap/cli build --skipPwaValidation
           else
-            bubblewrap build --skipPwaValidation || gradle assembleDebug
+            npx @bubblewrap/cli build --skipPwaValidation
           fi
         env:
           BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ secrets.BUBBLEWRAP_KEYSTORE_PASSWORD }}
