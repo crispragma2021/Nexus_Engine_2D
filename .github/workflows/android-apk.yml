@@ -37,13 +37,20 @@ jobs:
       - name: Preconfigure Bubblewrap CLI paths
         run: |
           mkdir -p "$HOME/.bubblewrap"
+          
+          # Detectar la ruta exacta del SDK que espera Bubblewrap
+          SDK_PATH="${ANDROID_HOME}/cmdline-tools/latest"
+          if [ ! -d "$SDK_PATH" ]; then
+            SDK_PATH="${ANDROID_HOME}"
+          fi
+
           cat <<EOF > "$HOME/.bubblewrap/config.json"
           {
             "jdkPath": "${JAVA_HOME}",
-            "androidSdkPath": "${ANDROID_SDK_ROOT}"
+            "androidSdkPath": "${SDK_PATH}"
           }
           EOF
-          echo "Bubblewrap config created:"
+          echo "Bubblewrap config.json:"
           cat "$HOME/.bubblewrap/config.json"
 
       - name: Decode Android Keystore
@@ -63,12 +70,10 @@ jobs:
           mkdir -p android
           cd android
 
-          # Si no existe el manifest del TWA, se genera de forma desatendida
           if [ ! -f "twa-manifest.json" ]; then
             yes "" | bubblewrap init --manifest="${PWA_URL}/manifest.webmanifest" --skipPwaValidation --directory . || true
           fi
 
-          # Compilar APK no interactivo
           if [ "${{ github.event.inputs.build_type }}" = "release" ]; then
             yes "" | bubblewrap build --skipPwaValidation
           else
