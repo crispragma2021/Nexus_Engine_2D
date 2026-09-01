@@ -26,6 +26,9 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -34,13 +37,13 @@ jobs:
       - name: Install Bubblewrap CLI
         run: npm install -g @bubblewrap/cli
 
-      - name: Configure Bubblewrap Environment
+      - name: Configure Bubblewrap paths
         run: |
           mkdir -p "$HOME/.bubblewrap"
           cat <<EOF > "$HOME/.bubblewrap/config.json"
           {
             "jdkPath": "${JAVA_HOME}",
-            "androidSdkPath": "${ANDROID_HOME}"
+            "androidSdkPath": "${ANDROID_SDK_ROOT}"
           }
           EOF
 
@@ -55,7 +58,6 @@ jobs:
           mkdir -p android
           cd android
 
-          # Generar twa-manifest.json estático sin preguntas interactivas
           cat <<EOF > twa-manifest.json
           {
             "packageId": "app.autosasistente.twa",
@@ -98,7 +100,6 @@ jobs:
           }
           EOF
 
-          # Generar proyecto y compilar directamente
           if [ "${{ github.event.inputs.build_type }}" = "release" ]; then
             bubblewrap build --skipPwaValidation
           else
