@@ -34,15 +34,17 @@ jobs:
       - name: Install Bubblewrap CLI
         run: npm install -g @bubblewrap/cli
 
-      - name: Configure Bubblewrap Environment
+      - name: Preconfigure Bubblewrap CLI paths
         run: |
-          mkdir -p ~/.bubblewrap
-          cat << 'EOF' > ~/.bubblewrap/config.json
+          mkdir -p "$HOME/.bubblewrap"
+          cat <<EOF > "$HOME/.bubblewrap/config.json"
           {
-            "jdkPath": "${{ env.JAVA_HOME }}",
-            "androidSdkPath": "${{ env.ANDROID_HOME }}"
+            "jdkPath": "${JAVA_HOME}",
+            "androidSdkPath": "${ANDROID_SDK_ROOT}"
           }
           EOF
+          echo "Bubblewrap config created:"
+          cat "$HOME/.bubblewrap/config.json"
 
       - name: Decode Android Keystore
         if: ${{ github.event.inputs.build_type == 'release' }}
@@ -57,20 +59,20 @@ jobs:
             PWA_URL="https://autosasistente.app"
           fi
           echo "Generando e inicializando APK para: $PWA_URL"
-          
+
           mkdir -p android
           cd android
 
-          # Inicializar proyecto Bubblewrap si no existe twa-manifest.json
+          # Si no existe el manifest del TWA, se genera de forma desatendida
           if [ ! -f "twa-manifest.json" ]; then
-            npx @bubblewrap/cli init --manifest="${PWA_URL}/manifest.webmanifest" --skipPwaValidation --directory .
+            yes "" | bubblewrap init --manifest="${PWA_URL}/manifest.webmanifest" --skipPwaValidation --directory . || true
           fi
 
-          # Compilar APK
+          # Compilar APK no interactivo
           if [ "${{ github.event.inputs.build_type }}" = "release" ]; then
-            npx @bubblewrap/cli build --skipPwaValidation
+            yes "" | bubblewrap build --skipPwaValidation
           else
-            npx @bubblewrap/cli build --skipPwaValidation
+            yes "" | bubblewrap build --skipPwaValidation
           fi
         env:
           BUBBLEWRAP_KEYSTORE_PASSWORD: ${{ secrets.BUBBLEWRAP_KEYSTORE_PASSWORD }}
