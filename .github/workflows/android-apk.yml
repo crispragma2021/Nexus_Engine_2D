@@ -1,3 +1,4 @@
+cat << 'EOF' > .github/workflows/android-apk.yml
 name: Android APK (Trusted Web Activity)
 
 on:
@@ -40,12 +41,12 @@ jobs:
       - name: Configure Bubblewrap paths
         run: |
           mkdir -p "$HOME/.bubblewrap"
-          cat <<EOF > "$HOME/.bubblewrap/config.json"
+          cat <<JSON > "$HOME/.bubblewrap/config.json"
           {
             "jdkPath": "${JAVA_HOME}",
             "androidSdkPath": "${ANDROID_SDK_ROOT}"
           }
-          EOF
+          JSON
 
       - name: Decode Android Keystore
         if: ${{ github.event.inputs.build_type == 'release' }}
@@ -58,7 +59,7 @@ jobs:
           mkdir -p android
           cd android
 
-          cat <<EOF > twa-manifest.json
+          cat <<JSON > twa-manifest.json
           {
             "packageId": "app.autosasistente.twa",
             "host": "autosasistente.app",
@@ -98,8 +99,12 @@ jobs:
               }
             }
           }
-          EOF
+          JSON
 
+          # Generar estructura de proyecto no interactiva
+          yes "y" | bubblewrap update --skipPwaValidation || true
+
+          # Compilar APK
           if [ "${{ github.event.inputs.build_type }}" = "release" ]; then
             bubblewrap build --skipPwaValidation
           else
@@ -117,3 +122,4 @@ jobs:
             android/**/*.apk
             **/*.apk
           retention-days: 7
+EOF
