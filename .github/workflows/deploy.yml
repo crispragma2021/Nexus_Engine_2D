@@ -29,5 +29,5 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           projectName: 'nexus-engine'
-          directory: '.output/public'
+          directory: 'dist/client'
           gitHubToken: ${{ secrets.GITHUB_TOKEN }}
