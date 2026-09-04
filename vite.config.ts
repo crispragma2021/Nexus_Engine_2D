@@ -16,7 +16,19 @@ export default defineConfig(({ command }): UserConfig => {
   if (command === "serve") {
     // Modo desarrollo: escucha en todas las interfaces para poder abrir el
     // editor 2D desde la red (LAN/proxy) en el puerto 8080.
-    config.server = { host: "0.0.0.0", port: 8080, strictPort: true };
+    config.server = {
+      host: "0.0.0.0",
+      port: 8080,
+      strictPort: true,
+      // Permite que el túnel de Cloudflare (dominios públicos) acceda al
+      // servidor en desarrollo sin ser bloqueado por Vite.
+      allowedHosts: [
+        "autosasistente.app",
+        "www.autosasistente.app",
+        "localhost",
+        "127.0.0.1",
+      ],
+    };
   }
 
   return config;
