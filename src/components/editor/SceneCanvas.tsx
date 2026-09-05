@@ -670,14 +670,16 @@ export function SceneCanvas() {
     if (drag.kind === "move") {
       const dx = world.x - drag.start.x;
       const dy = world.y - drag.start.y;
-      for (const [id, position] of drag.origin) {
+      const ids = Array.from(drag.origin.keys());
+      if (ids.length > 0) {
         dispatch({
           type: "moveInstances",
-          ids: [id],
-          dx: snapValue(position.x + dx, scene.grid.width) - position.x,
-          dy: snapValue(position.y + dy, scene.grid.height) - position.y,
+          ids,
+          dx,
+          dy,
         });
       }
+      setDrag({ ...drag, start: world });
       return;
     }
     if (drag.kind === "rotate") {
@@ -739,6 +741,23 @@ export function SceneCanvas() {
         return;
       }
       if (activeTouchPointers.current.size === 0) touchSequenceTransformed.current = false;
+    }
+
+    if (drag?.kind === "move" && scene.grid.snap) {
+      for (const id of drag.origin.keys()) {
+        const instance = scene.instances.find((i) => i.id === id);
+        if (instance) {
+          const snappedX = snapValue(instance.x, scene.grid.width);
+          const snappedY = snapValue(instance.y, scene.grid.height);
+          if (snappedX !== instance.x || snappedY !== instance.y) {
+            dispatch({
+              type: "updateInstance",
+              id,
+              patch: { x: snappedX, y: snappedY },
+            });
+          }
+        }
+      }
     }
 
     if (drag?.kind === "marquee") {
