@@ -185,6 +185,7 @@ export function SceneCanvas() {
         kind: "move";
         start: { x: number; y: number };
         origin: Map<string, { x: number; y: number }>;
+        dragged?: boolean;
       }
     | {
         kind: "resize";
@@ -617,7 +618,7 @@ export function SceneCanvas() {
         origin.set(id, { x: object.x, y: object.y });
       }
     }
-    setDrag({ kind: "move", start: world, origin });
+    setDrag({ kind: "move", start: world, origin, dragged: false });
     event.currentTarget.setPointerCapture(event.pointerId);
   };
 
@@ -668,18 +669,29 @@ export function SceneCanvas() {
       return;
     }
     if (drag.kind === "move") {
-      const dx = world.x - drag.start.x;
-      const dy = world.y - drag.start.y;
-      const ids = Array.from(drag.origin.keys());
-      if (ids.length > 0) {
+      const totalDx = world.x - drag.start.x;
+      const totalDy = world.y - drag.start.y;
+
+      if (!drag.dragged) {
+        if (Math.hypot(totalDx, totalDy) < 3 / view.scale) {
+          return;
+        }
+        dispatch({ type: "recordHistory" });
+        setDrag({ ...drag, dragged: true });
+      }
+
+      const positions = Array.from(drag.origin.entries()).map(([id, initialPos]) => ({
+        id,
+        x: snapValue(initialPos.x + totalDx, scene.grid.width),
+        y: snapValue(initialPos.y + totalDy, scene.grid.height),
+      }));
+
+      if (positions.length > 0) {
         dispatch({
-          type: "moveInstances",
-          ids,
-          dx,
-          dy,
+          type: "setInstancesPositions",
+          positions,
         });
       }
-      setDrag({ ...drag, start: world });
       return;
     }
     if (drag.kind === "rotate") {
@@ -741,23 +753,6 @@ export function SceneCanvas() {
         return;
       }
       if (activeTouchPointers.current.size === 0) touchSequenceTransformed.current = false;
-    }
-
-    if (drag?.kind === "move" && scene.grid.snap) {
-      for (const id of drag.origin.keys()) {
-        const instance = scene.instances.find((i) => i.id === id);
-        if (instance) {
-          const snappedX = snapValue(instance.x, scene.grid.width);
-          const snappedY = snapValue(instance.y, scene.grid.height);
-          if (snappedX !== instance.x || snappedY !== instance.y) {
-            dispatch({
-              type: "updateInstance",
-              id,
-              patch: { x: snappedX, y: snappedY },
-            });
-          }
-        }
-      }
     }
 
     if (drag?.kind === "marquee") {

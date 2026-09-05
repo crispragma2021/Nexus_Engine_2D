@@ -240,6 +240,7 @@ type Action =
   | { type: "addInstance"; objectId: string; x: number; y: number; layer?: string }
   | { type: "addInstances"; instances: GDInstance[] }
   | { type: "moveInstances"; ids: string[]; dx: number; dy: number }
+  | { type: "setInstancesPositions"; positions: { id: string; x: number; y: number }[] }
   | { type: "updateInstance"; id: string; patch: Partial<GDInstance> }
   | { type: "deleteInstances"; ids: string[] }
   | { type: "duplicateInstances"; ids: string[] }
@@ -329,6 +330,7 @@ type Action =
   | { type: "addExternalEvents"; name?: string }
   | { type: "addExternalLayout"; name?: string }
   // history
+  | { type: "recordHistory" }
   | { type: "undo" }
   | { type: "redo" };
 
@@ -1142,6 +1144,17 @@ function projectReducer(state: State, action: Action): State {
           action.ids.includes(i.id) ? { ...i, x: i.x + action.dx, y: i.y + action.dy } : i,
         ),
       }));
+
+    case "setInstancesPositions": {
+      const posMap = new Map(action.positions.map((p) => [p.id, p]));
+      return patchScene(state, (s) => ({
+        ...s,
+        instances: s.instances.map((i) => {
+          const target = posMap.get(i.id);
+          return target ? { ...i, x: target.x, y: target.y } : i;
+        }),
+      }));
+    }
 
     case "updateInstance":
       return patchScene(state, (s) => ({
@@ -2055,6 +2068,18 @@ function reducer(state: State, action: Action): State {
     case "agentSetSnapshotMode":
       return { ...state, agent: setAgentSnapshotMode(state.agent, action.mode) };
 
+    case "recordHistory": {
+      return {
+        ...state,
+        past: [
+          ...state.past,
+          { project: state.project, sceneName: state.activeSceneName, agent: state.agent },
+        ].slice(-60),
+        future: [],
+        dirty: true,
+      };
+    }
+
     case "undo": {
       const prev = state.past[state.past.length - 1];
       if (!prev) return state;
@@ -2094,7 +2119,10 @@ function reducer(state: State, action: Action): State {
       if (nextProject === state) return state;
       const changed = nextProject.project !== state.project || nextProject.ui !== state.ui;
       if (!changed) return state;
-      const record = MUTATING.has(action.type) && action.type !== "moveInstances";
+      const record =
+        MUTATING.has(action.type) &&
+        action.type !== "moveInstances" &&
+        action.type !== "setInstancesPositions";
       return {
         ...nextProject,
         past: record
