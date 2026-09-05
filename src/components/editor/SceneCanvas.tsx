@@ -185,6 +185,7 @@ export function SceneCanvas() {
         kind: "move";
         start: { x: number; y: number };
         origin: Map<string, { x: number; y: number }>;
+        dragged?: boolean;
       }
     | {
         kind: "resize";
@@ -617,7 +618,7 @@ export function SceneCanvas() {
         origin.set(id, { x: object.x, y: object.y });
       }
     }
-    setDrag({ kind: "move", start: world, origin });
+    setDrag({ kind: "move", start: world, origin, dragged: false });
     event.currentTarget.setPointerCapture(event.pointerId);
   };
 
@@ -668,14 +669,27 @@ export function SceneCanvas() {
       return;
     }
     if (drag.kind === "move") {
-      const dx = world.x - drag.start.x;
-      const dy = world.y - drag.start.y;
-      for (const [id, position] of drag.origin) {
+      const totalDx = world.x - drag.start.x;
+      const totalDy = world.y - drag.start.y;
+
+      if (!drag.dragged) {
+        if (Math.hypot(totalDx, totalDy) < 3 / view.scale) {
+          return;
+        }
+        dispatch({ type: "recordHistory" });
+        setDrag({ ...drag, dragged: true });
+      }
+
+      const positions = Array.from(drag.origin.entries()).map(([id, initialPos]) => ({
+        id,
+        x: snapValue(initialPos.x + totalDx, scene.grid.width),
+        y: snapValue(initialPos.y + totalDy, scene.grid.height),
+      }));
+
+      if (positions.length > 0) {
         dispatch({
-          type: "moveInstances",
-          ids: [id],
-          dx: snapValue(position.x + dx, scene.grid.width) - position.x,
-          dy: snapValue(position.y + dy, scene.grid.height) - position.y,
+          type: "setInstancesPositions",
+          positions,
         });
       }
       return;
