@@ -321,7 +321,7 @@ export function SceneCanvas() {
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, size.width, size.height);
-    ctx.fillStyle = "#101017";
+    ctx.fillStyle = "#F5F5F7";
     ctx.fillRect(0, 0, size.width, size.height);
     drawEditorBackdrop(ctx, size, view);
 
@@ -407,12 +407,12 @@ export function SceneCanvas() {
     const labelWidth = Math.ceil(ctx.measureText(frameLabel).width) + 12;
     const labelX = Math.max(4, Math.min(size.width - labelWidth - 4, frameLeft));
     const labelY = frameTop >= 22 ? frameTop - 20 : Math.max(4, frameTop + 4);
-    ctx.fillStyle = "rgba(16,16,23,0.94)";
+    ctx.fillStyle = "rgba(220,224,230,0.95)";
     ctx.fillRect(labelX, labelY, labelWidth, 17);
     ctx.strokeStyle = "rgba(138,214,255,0.75)";
     ctx.lineWidth = 1;
     ctx.strokeRect(labelX + 0.5, labelY + 0.5, labelWidth - 1, 16);
-    ctx.fillStyle = "#8AD6FF";
+    ctx.fillStyle = "#2563EB";
     ctx.textBaseline = "middle";
     ctx.fillText(frameLabel, labelX + 6, labelY + 8.5);
     ctx.restore();
@@ -981,7 +981,7 @@ export function SceneCanvas() {
           : "default";
 
   return (
-    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-[#101017]">
+    <div className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-[#F5F5F7]">
       <div
         ref={wrapRef}
         className="relative min-h-0 flex-1 overflow-hidden"
