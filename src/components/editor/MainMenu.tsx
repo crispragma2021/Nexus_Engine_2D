@@ -208,7 +208,7 @@ export function MainMenu() {
                 type="button"
                 onClick={() => {
     closeMenu();
-    toast.info("Preferencias del editor (Tema, Idioma, Interfaz)");
+    dispatch({ type: "openDialog", dialog: { name: "projectProperties" } });
   }}
                 className="flex w-full items-center px-4 py-2 text-[#D2D2D9] hover:bg-[#2A2A38] hover:text-white"
               >

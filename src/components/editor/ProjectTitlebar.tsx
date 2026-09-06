@@ -5,7 +5,7 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { MainMenu } from "./MainMenu";
-import { ArrowLeft, Ellipsis, GripVertical, HelpCircle, Plus, Save, Settings, X } from "lucide-react";
+import { ArrowLeft, Ellipsis, GripVertical, HelpCircle, Plus, Save, X } from "lucide-react";
 import { useEditor } from "@/lib/editor/store";
 import { S } from "@/lib/editor/i18n";
 import { BRAND } from "@/lib/editor/brand";
@@ -172,15 +172,7 @@ export function ProjectTitlebar() {
             {dirty ? "Sin guardar" : "Guardado"}
           </span>
         </button>
-        <button
-          type="button"
-          title={S.gameSettings}
-          aria-label={S.gameSettings}
-          onClick={() => dispatch({ type: "openDialog", dialog: { name: "projectProperties" } })}
-          className="grid h-6 w-6 place-items-center rounded text-muted-foreground hover:bg-elevated hover:text-foreground"
-        >
-          <Settings className="h-3.5 w-3.5" />
-        </button>
+        
         <a
           href="https://gdevelop.io"
           target="_blank"
