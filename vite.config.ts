@@ -22,12 +22,7 @@ export default defineConfig(({ command }): UserConfig => {
       strictPort: true,
       // Permite que el túnel de Cloudflare (dominios públicos) acceda al
       // servidor en desarrollo sin ser bloqueado por Vite.
-      allowedHosts: [
-        "autosasistente.app",
-        "www.autosasistente.app",
-        "localhost",
-        "127.0.0.1",
-      ],
+      allowedHosts: true,
     };
   }
 
