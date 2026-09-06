@@ -374,7 +374,7 @@ export function SceneCanvas() {
     ctx.restore();
 
     // Window mask: darken everything outside the game area.
-    if (ui.windowMask && project.gameSettings.renderOutsideGameArea !== true) {
+    if (false && ui.windowMask && project.gameSettings.renderOutsideGameArea !== true) {
       ctx.save();
       ctx.fillStyle = "rgba(0,0,0,0.55)";
       const left = view.offsetX;
