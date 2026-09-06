@@ -5,7 +5,7 @@
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { MainMenu } from "./MainMenu";
-import { ArrowLeft, Ellipsis, GripVertical, HelpCircle, Plus, Save, X } from "lucide-react";
+import { Ellipsis, GripVertical, HelpCircle, Plus, Save, X } from "lucide-react";
 import { useEditor } from "@/lib/editor/store";
 import { S } from "@/lib/editor/i18n";
 import { BRAND } from "@/lib/editor/brand";
@@ -77,17 +77,7 @@ export function ProjectTitlebar() {
   return (
     <div className="flex h-8 shrink-0 items-stretch gap-0 overflow-hidden bg-toolbar pl-1 text-foreground">
       <MainMenu />
-      <button
-        type="button"
-        data-editor-home-button
-        aria-label={`${S.home} — Volver al Dashboard`}
-        title={`${S.home} — Volver al Dashboard`}
-        onClick={() => navigate({ to: "/" })}
-        className="mr-1 flex shrink-0 items-center gap-1 rounded px-1.5 text-muted-foreground hover:bg-elevated hover:text-foreground"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        <span className="hidden md:inline">{S.home}</span>
-      </button>
+      
 
       <button
         type="button"
