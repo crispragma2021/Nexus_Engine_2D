@@ -2,7 +2,8 @@
 // right = scene picker + preview. Grid/snap/zoom live in the scene toolbar under
 // the canvas (like GDevelop), while the object/event commands sit here.
 
-import { useState } from "react";
+import {
+  useState } from "react";
 import {
   Bot,
   ChevronDown,
@@ -26,6 +27,7 @@ import {
   Undo2,
   ZoomIn,
   ZoomOut,
+  Globe
 } from "lucide-react";
 import { useEditor } from "@/lib/editor/store";
 import { S } from "@/lib/editor/i18n";
