@@ -215,7 +215,7 @@ function InlineAiOverlay() {
 }
 
 function Body() {
-  const { ui } = useEditor();
+  const { ui, dispatch } = useEditor();
   useEditorShortcuts();
 
   return (
@@ -242,6 +242,11 @@ function Body() {
       <InstructionSelectorDialog />
       <PreviewDialog />
       <ProjectManagerDrawer />
+      <ShareDialog
+        open={ui.dialog?.name === "share"}
+        initialTab={ui.dialog?.name === "share" ? ui.dialog.tab : "publish"}
+        onClose={() => dispatch({ type: "closeDialog" })}
+      />
       <InlineAiOverlay />
     </div>
   );

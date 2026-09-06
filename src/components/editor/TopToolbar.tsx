@@ -2,8 +2,7 @@
 // right = scene picker + preview. Grid/snap/zoom live in the scene toolbar under
 // the canvas (like GDevelop), while the object/event commands sit here.
 
-import {
-  useState } from "react";
+import { useState } from "react";
 import {
   Bot,
   ChevronDown,
@@ -12,6 +11,7 @@ import {
   Clock,
   Copy,
   Eraser,
+  Globe,
   Grid3x3,
   Magnet,
   PanelLeft,
@@ -27,7 +27,6 @@ import {
   Undo2,
   ZoomIn,
   ZoomOut,
-  Globe
 } from "lucide-react";
 import { useEditor } from "@/lib/editor/store";
 import { S } from "@/lib/editor/i18n";
@@ -329,7 +328,19 @@ export function TopToolbar() {
 
       <div className="z-10 flex shrink-0 items-center bg-toolbar pl-1 shadow-[-8px_0_12px_rgba(37,37,46,0.95)]">
         <Sep />
-        <IconButton
+        <button
+            type="button"
+            aria-label="Compartir"
+            title={S.share}
+            onClick={() =>
+              dispatch({ type: "openDialog", dialog: { name: "share", tab: "publish" } })
+            }
+            className="flex h-8 shrink-0 items-center gap-1.5 rounded bg-[#7046EC] px-2 text-[12px] font-semibold text-white hover:opacity-90 sm:px-3"
+          >
+            <Globe className="h-4 w-4" />
+            <span className="hidden sm:inline">{S.share}</span>
+          </button>
+          <IconButton
           label="Vista previa en dispositivo"
           className="hidden sm:flex"
           onClick={() => dispatch({ type: "ui", patch: { previewOpen: true } })}

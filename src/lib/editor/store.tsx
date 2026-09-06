@@ -87,9 +87,11 @@ export type EditorDialog =
       name: "instruction";
       eventId: string;
       slot: "conditions" | "actions";
-      instructionId: string | null;
+      instructionId: string | { name: "share"; tab: "publish" | "invite" }
+  | null;
     }
   | { name: "externalEvents"; eventsName: string }
+  | { name: "share"; tab: "publish" | "invite" }
   | null;
 
 export interface InlineAiSession {
