@@ -4,6 +4,7 @@
 
 import { useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
+import { MainMenu } from "./MainMenu";
 import { ArrowLeft, Ellipsis, GripVertical, HelpCircle, Plus, Save, Settings, X } from "lucide-react";
 import { useEditor } from "@/lib/editor/store";
 import { S } from "@/lib/editor/i18n";
@@ -75,6 +76,7 @@ export function ProjectTitlebar() {
 
   return (
     <div className="flex h-8 shrink-0 items-stretch gap-0 overflow-hidden bg-toolbar pl-1 text-foreground">
+      <MainMenu />
       <button
         type="button"
         data-editor-home-button
