@@ -1,283 +1,227 @@
-import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "@tanstack/react-router";
-import {
-  ChevronLeft,
-  ChevronRight,
-  FolderOpen,
-  Globe,
-  HardDrive,
-  History,
-  Menu,
-  Plus,
-  Save,
-  Settings,
-  Smartphone,
-  Upload,
-  XCircle,
-} from "lucide-react";
-import { toast } from "sonner";
+import * as React from "react";
+import { useRouterState, useNavigate } from "@tanstack/react-router";
+import { Menu, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { useEditor } from "@/lib/editor/store";
-import { S } from "@/lib/editor/i18n";
-import { saveProjectEverywhere } from "@/lib/projects/save";
-
-type MenuPage = "root" | "recent" | "export";
-
-interface RecentItem {
-  id: string;
-  name: string;
-  updatedAt: number;
-}
+import { toast } from "sonner";
 
 export function MainMenu() {
-  const { project, dirty, dispatch } = useEditor();
+  const [open, setOpen] = React.useState(false);
+  const [showRecents, setShowRecents] = React.useState(false);
+  const { project, dispatch } = useEditor();
   const navigate = useNavigate();
-  const [open, setOpen] = useState(false);
-  const [page, setPage] = useState<MenuPage>("root");
-  const menuRef = useRef<HTMLDivElement>(null);
+  const routerState = useRouterState();
 
-  useEffect(() => {
-    function onClickOutside(e: MouseEvent) {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setOpen(false);
-        setPage("root");
-      }
-    }
-    function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        setOpen(false);
-        setPage("root");
-      }
-    }
-    if (open) {
-      document.addEventListener("mousedown", onClickOutside);
-      document.addEventListener("keydown", onKeyDown);
-    }
-    return () => {
-      document.removeEventListener("mousedown", onClickOutside);
-      document.removeEventListener("keydown", onKeyDown);
-    };
-  }, [open]);
+  const isEditor = routerState.location.pathname.startsWith("/editor");
+  const projectName = project?.name || "Proyecto";
 
-  const toggle = () => {
-    setOpen((prev) => !prev);
-    setPage("root");
-  };
-
-  const handleNewGame = () => {
-    navigate({ to: "/" });
+  const closeMenu = () => {
     setOpen(false);
+    setShowRecents(false);
   };
-
-  const handleSave = async () => {
-    try {
-      await saveProjectEverywhere(project);
-      dispatch({ type: "markSaved" });
-      toast.success(S.save || "Proyecto guardado.");
-    } catch {
-      toast.error("No se pudo guardar el proyecto.");
-    }
-    setOpen(false);
-  };
-
-  const handleCloseProject = () => {
-    if (dirty && !window.confirm("Tienes cambios sin guardar. ¿Deseas salir de todas formas?")) {
-      return;
-    }
-    navigate({ to: "/" });
-    setOpen(false);
-  };
-
-  const recentList: RecentItem[] = [
-    { id: project.name || "default", name: project.name || "Sin título", updatedAt: Date.now() },
-  ];
 
   return (
-    <div className="relative inline-block" ref={menuRef}>
+    <>
       <button
         type="button"
-        data-main-menu-button
-        aria-label="Menú principal"
-        aria-haspopup="menu"
-        aria-expanded={open}
+        onClick={() => setOpen(true)}
+        className="flex h-8 w-8 items-center justify-center rounded text-[#d1d1d6] hover:bg-[#32323B] hover:text-white transition-colors"
         title="Menú principal"
-        onClick={toggle}
-        className="flex h-7 w-7 items-center justify-center rounded text-muted-foreground hover:bg-elevated hover:text-foreground"
+        aria-label="Menú principal"
       >
         <Menu className="h-4 w-4" />
       </button>
 
       {open && (
-        <div
-          data-main-menu="dropdown"
-          role="menu"
-          className="absolute left-0 top-full z-50 mt-1 w-64 rounded-md border border-separator bg-toolbar p-1 shadow-xl backdrop-blur"
-        >
-          {page === "root" && (
-            <div className="flex flex-col gap-0.5 text-xs">
+        <div className="fixed inset-0 z-50 flex">
+          <div
+            className="fixed inset-0 bg-black/40 backdrop-blur-[1px]"
+            onClick={closeMenu}
+          />
+
+          <div className="relative z-10 flex h-full w-[290px] max-w-[85vw] flex-col bg-[#1D1D26] text-[#E0E0E6] shadow-2xl border-r border-[#2C2C38]">
+            {/* Encabezado contextual */}
+            <div className="flex h-12 items-center justify-between border-b border-[#2C2C38] px-3.5">
+              <div className="flex items-center gap-2.5 overflow-hidden">
+                <Menu className="h-4 w-4 shrink-0 text-[#A0A0AB]" />
+                <span className="truncate text-[14px] font-semibold tracking-tight text-white">
+                  {isEditor ? projectName : "Menú"}
+                </span>
+              </div>
               <button
                 type="button"
-                role="menuitem"
-                onClick={handleNewGame}
-                className="flex items-center gap-2 rounded px-2 py-1.5 text-left text-foreground hover:bg-elevated"
+                onClick={closeMenu}
+                className="flex h-7 w-7 items-center justify-center rounded text-[#A0A0AB] hover:bg-[#2A2A38] hover:text-white transition-colors"
               >
-                <Plus className="h-3.5 w-3.5 text-muted-foreground" />
-                <span>Crear un juego</span>
-              </button>
-
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  navigate({ to: "/" });
-                  setOpen(false);
-                }}
-                className="flex items-center gap-2 rounded px-2 py-1.5 text-left text-foreground hover:bg-elevated"
-              >
-                <FolderOpen className="h-3.5 w-3.5 text-muted-foreground" />
-                <span>Abrir...</span>
-              </button>
-
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => setPage("recent")}
-                className="flex items-center justify-between rounded px-2 py-1.5 text-left text-foreground hover:bg-elevated"
-              >
-                <div className="flex items-center gap-2">
-                  <History className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span>Abrir recientes</span>
-                </div>
-                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-              </button>
-
-              <div className="my-1 h-px bg-separator" />
-
-              <button
-                type="button"
-                role="menuitem"
-                onClick={handleSave}
-                className="flex items-center gap-2 rounded px-2 py-1.5 text-left text-foreground hover:bg-elevated"
-              >
-                <Save className="h-3.5 w-3.5 text-muted-foreground" />
-                <span>{S.save || "Guardar"}</span>
-              </button>
-
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  toast.info("Guardar como copia local disponible próximamente.");
-                  setOpen(false);
-                }}
-                className="flex items-center gap-2 rounded px-2 py-1.5 text-left text-foreground hover:bg-elevated"
-              >
-                <HardDrive className="h-3.5 w-3.5 text-muted-foreground" />
-                <span>Guardar como...</span>
-              </button>
-
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => setPage("export")}
-                className="flex items-center justify-between rounded px-2 py-1.5 text-left text-foreground hover:bg-elevated"
-              >
-                <div className="flex items-center gap-2">
-                  <Upload className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span>Exportar (web, móvil)</span>
-                </div>
-                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
-              </button>
-
-              <div className="my-1 h-px bg-separator" />
-
-              <button
-                type="button"
-                role="menuitem"
-                onClick={() => {
-                  dispatch({ type: "openDialog", dialog: { name: "sceneProperties" } });
-                  setOpen(false);
-                }}
-                className="flex items-center gap-2 rounded px-2 py-1.5 text-left text-foreground hover:bg-elevated"
-              >
-                <Settings className="h-3.5 w-3.5 text-muted-foreground" />
-                <span>Preferencias</span>
-              </button>
-
-              <button
-                type="button"
-                role="menuitem"
-                onClick={handleCloseProject}
-                className="flex items-center gap-2 rounded px-2 py-1.5 text-left text-rose-400 hover:bg-elevated hover:text-rose-300"
-              >
-                <XCircle className="h-3.5 w-3.5" />
-                <span>Cerrar proyecto</span>
+                <X className="h-4 w-4" />
               </button>
             </div>
-          )}
 
-          {page === "recent" && (
-            <div className="flex flex-col gap-0.5 text-xs">
-              <button
-                type="button"
-                onClick={() => setPage("root")}
-                className="flex items-center gap-1 border-b border-separator px-2 py-1 font-semibold text-muted-foreground hover:text-foreground"
-              >
-                <ChevronLeft className="h-3 w-3" /> Atrás
-              </button>
-              {recentList.map((item) => (
+            {/* Opciones */}
+            <div className="flex-1 overflow-y-auto py-2 text-[13px]">
+              {/* < Atrás solo se muestra dentro del editor */}
+              {isEditor && (
                 <button
-                  key={item.id}
                   type="button"
                   onClick={() => {
-                    toast.info(`Proyecto activo: ${item.name}`);
-                    setOpen(false);
+                    closeMenu();
+                    navigate({ to: "/" });
                   }}
-                  className="flex flex-col rounded px-2 py-1 text-left text-foreground hover:bg-elevated"
+                  className="flex w-full items-center gap-1.5 px-4 py-2.5 font-medium text-white hover:bg-[#2A2A38] transition-colors"
                 >
-                  <span className="truncate font-medium">{item.name}</span>
-                  <span className="text-[10px] text-muted-foreground">
-                    {new Date(item.updatedAt).toLocaleDateString()}
-                  </span>
+                  <ChevronLeft className="h-4 w-4" />
+                  <span>Atrás</span>
                 </button>
-              ))}
-            </div>
-          )}
+              )}
 
-          {page === "export" && (
-            <div className="flex flex-col gap-0.5 text-xs">
-              <button
-                type="button"
-                onClick={() => setPage("root")}
-                className="flex items-center gap-1 border-b border-separator px-2 py-1 font-semibold text-muted-foreground hover:text-foreground"
-              >
-                <ChevronLeft className="h-3 w-3" /> Atrás
-              </button>
               <button
                 type="button"
                 onClick={() => {
-                  toast.success("Empaquetador Web HTML5 generado.");
-                  setOpen(false);
+                  closeMenu();
+                  navigate({ to: "/" });
                 }}
-                className="flex items-center gap-2 rounded px-2 py-1.5 text-foreground hover:bg-elevated"
+                className="flex w-full items-center px-4 py-2 text-[#D2D2D9] hover:bg-[#2A2A38] hover:text-white"
               >
-                <Globe className="h-3.5 w-3.5 text-muted-foreground" />
-                <span>Exportar como Web (HTML5)</span>
+                Crear un juego
               </button>
+
               <button
                 type="button"
                 onClick={() => {
-                  toast.info("Generador de APK / Capacitor disponible próximamente.");
-                  setOpen(false);
+                  closeMenu();
+                  toast.info("Abrir proyecto...");
                 }}
-                className="flex items-center gap-2 rounded px-2 py-1.5 text-foreground hover:bg-elevated"
+                className="flex w-full items-center px-4 py-2 text-[#D2D2D9] hover:bg-[#2A2A38] hover:text-white"
               >
-                <Smartphone className="h-3.5 w-3.5 text-muted-foreground" />
-                <span>Exportar para Android / iOS</span>
+                Abrir...
+              </button>
+
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowRecents(!showRecents)}
+                  className="flex w-full items-center justify-between px-4 py-2 text-[#D2D2D9] hover:bg-[#2A2A38] hover:text-white"
+                >
+                  <span>Abrir recientes</span>
+                  <ChevronRight className="h-4 w-4 text-[#8E8E9A]" />
+                </button>
+                {showRecents && (
+                  <div className="bg-[#181820] py-1 border-y border-[#2C2C38]">
+                    <div className="px-6 py-1.5 text-[12px] text-[#8E8E9A] italic">
+                      {isEditor ? `${projectName} (actual)` : "Sin recientes"}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Opciones activas solo en el editor */}
+              <button
+                type="button"
+                disabled={!isEditor}
+                onClick={() => {
+                  closeMenu();
+                  dispatch({ type: "markSaved" });
+                  toast.success("Proyecto guardado");
+                }}
+                className={`flex w-full items-center px-4 py-2 ${
+                  isEditor ? "text-[#D2D2D9] hover:bg-[#2A2A38] hover:text-white" : "text-[#555562] cursor-not-allowed"
+                }`}
+              >
+                Guardar
+              </button>
+
+              <button
+                type="button"
+                disabled={!isEditor}
+                onClick={() => {
+                  closeMenu();
+                  dispatch({ type: "markSaved" });
+                  toast.success("Copia guardada");
+                }}
+                className={`flex w-full items-center px-4 py-2 ${
+                  isEditor ? "text-[#D2D2D9] hover:bg-[#2A2A38] hover:text-white" : "text-[#555562] cursor-not-allowed"
+                }`}
+              >
+                Guardar como...
+              </button>
+
+              <button
+                type="button"
+                disabled={!isEditor}
+                onClick={() => {
+                  closeMenu();
+                  toast.info("Historial de versiones");
+                }}
+                className={`flex w-full items-center px-4 py-2 ${
+                  isEditor ? "text-[#D2D2D9] hover:bg-[#2A2A38] hover:text-white" : "text-[#555562] cursor-not-allowed"
+                }`}
+              >
+                Mostrar historial de versiones
+              </button>
+
+              <div className="my-1.5 border-t border-[#2C2C38]" />
+
+              <button
+                type="button"
+                disabled={!isEditor}
+                onClick={() => {
+                  closeMenu();
+                  toast.info("Invitar colaboradores");
+                }}
+                className={`flex w-full items-center px-4 py-2 ${
+                  isEditor ? "text-[#D2D2D9] hover:bg-[#2A2A38] hover:text-white" : "text-[#555562] cursor-not-allowed"
+                }`}
+              >
+                Invitar colaboradores
+              </button>
+
+              <button
+                type="button"
+                disabled={!isEditor}
+                onClick={() => {
+                  closeMenu();
+                  toast.info("Opciones de exportación");
+                }}
+                className={`flex w-full items-center px-4 py-2 ${
+                  isEditor ? "text-[#D2D2D9] hover:bg-[#2A2A38] hover:text-white" : "text-[#555562] cursor-not-allowed"
+                }`}
+              >
+                Exportar (web, iOS, Android)...
+              </button>
+
+              <div className="my-1.5 border-t border-[#2C2C38]" />
+
+              <button
+                type="button"
+                disabled={!isEditor}
+                onClick={() => {
+                  closeMenu();
+                  navigate({ to: "/" });
+                }}
+                className={`flex w-full items-center px-4 py-2 ${
+                  isEditor ? "text-[#D2D2D9] hover:bg-[#2A2A38] hover:text-white" : "text-[#555562] cursor-not-allowed"
+                }`}
+              >
+                Cerrar proyecto
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  closeMenu();
+                  if (isEditor) {
+                    dispatch({ type: "openDialog", dialog: { name: "projectProperties" } });
+                  } else {
+                    toast.info("Preferencias generales");
+                  }
+                }}
+                className="flex w-full items-center px-4 py-2 text-[#D2D2D9] hover:bg-[#2A2A38] hover:text-white"
+              >
+                Preferencias
               </button>
             </div>
-          )}
+          </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
