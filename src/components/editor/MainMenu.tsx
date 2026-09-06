@@ -165,7 +165,7 @@ export function MainMenu() {
                 disabled={!isEditor}
                 onClick={() => {
                   closeMenu();
-                  toast.info("Invitar colaboradores");
+                  dispatch({ type: "openDialog", dialog: { name: "share", tab: "invite" } as any });
                 }}
                 className={`flex w-full items-center px-4 py-2 ${
                   isEditor ? "text-[#D2D2D9] hover:bg-[#2A2A38] hover:text-white" : "text-[#555562] cursor-not-allowed"

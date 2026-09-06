@@ -1,3 +1,4 @@
+import { ShareDialog } from "./ShareDialog";
 // Editor shell — the layout of GDevelop's `MainFrame`: titlebar with closable
 // tabs, the 40px toolbar, then [left column | workspace | right column]. The
 // workspace switches between the scene editor and the events sheet of the active
