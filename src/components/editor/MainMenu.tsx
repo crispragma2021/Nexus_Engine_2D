@@ -207,13 +207,9 @@ export function MainMenu() {
               <button
                 type="button"
                 onClick={() => {
-                  closeMenu();
-                  if (isEditor) {
-                    dispatch({ type: "openDialog", dialog: { name: "projectProperties" } });
-                  } else {
-                    toast.info("Preferencias generales");
-                  }
-                }}
+    closeMenu();
+    toast.info("Preferencias del editor (Tema, Idioma, Interfaz)");
+  }}
                 className="flex w-full items-center px-4 py-2 text-[#D2D2D9] hover:bg-[#2A2A38] hover:text-white"
               >
                 Preferencias

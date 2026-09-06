@@ -374,19 +374,7 @@ export function SceneCanvas() {
     ctx.restore();
 
     // Window mask: darken everything outside the game area.
-    if (false && ui.windowMask && project.gameSettings.renderOutsideGameArea !== true) {
-      ctx.save();
-      ctx.fillStyle = "rgba(0,0,0,0.55)";
-      const left = view.offsetX;
-      const top = view.offsetY;
-      const w = windowSize.width * view.scale;
-      const h = windowSize.height * view.scale;
-      ctx.fillRect(0, 0, size.width, Math.max(0, top));
-      ctx.fillRect(0, top + h, size.width, Math.max(0, size.height - top - h));
-      ctx.fillRect(0, top, Math.max(0, left), h);
-      ctx.fillRect(left + w, top, Math.max(0, size.width - left - w), h);
-      ctx.restore();
-    }
+    // windowMask removido para preservar paridad de fondo claro
 
     // High-contrast game-resolution frame. It must remain unmistakable against
     // both the scene background and the infinite editor backdrop.

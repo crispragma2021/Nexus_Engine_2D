@@ -47,3 +47,15 @@ android/gradle.properties
 android/android.keystore
 .vercel
 .env*
+
+# Nexus local tooling & artifacts
+nexus_*.sh
+cf_*.sh
+fix_cf_core.sh
+run_full_suite_and_bootstrap.sh
+setup_cf_env.sh
+nexus_docs.json
+tools_manifest.json
+.nexus/
+target/
+*.bak
