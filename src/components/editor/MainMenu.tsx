@@ -18,15 +18,15 @@ import {
 import { toast } from "sonner";
 import { useEditor } from "@/lib/editor/store";
 import { S } from "@/lib/editor/i18n";
-import { createEmptyProject } from "@/lib/engine/project";
-import {
-  clearCurrentProject,
-  listLocalProjects,
-  saveProjectLocally,
-  setCurrentProject,
-} from "@/lib/editor/persistence";
+import { saveProjectEverywhere } from "@/lib/projects/save";
 
 type MenuPage = "root" | "recent" | "export";
+
+interface RecentItem {
+  id: string;
+  name: string;
+  updatedAt: number;
+}
 
 export function MainMenu() {
   const { project, dirty, dispatch } = useEditor();
@@ -64,18 +64,18 @@ export function MainMenu() {
   };
 
   const handleNewGame = () => {
-    const fresh = createEmptyProject({ name: "Nuevo juego", width: 1280, height: 720 });
-    saveProjectLocally(fresh);
-    setCurrentProject(fresh.id);
-    dispatch({ type: "loadProject", project: fresh });
-    toast.success("Nuevo juego creado.");
+    navigate({ to: "/" });
     setOpen(false);
   };
 
-  const handleSave = () => {
-    saveProjectLocally(project);
-    dispatch({ type: "markSaved" });
-    toast.success(S.savedSuccess || "Proyecto guardado.");
+  const handleSave = async () => {
+    try {
+      await saveProjectEverywhere(project);
+      dispatch({ type: "markSaved" });
+      toast.success(S.save || "Proyecto guardado.");
+    } catch {
+      toast.error("No se pudo guardar el proyecto.");
+    }
     setOpen(false);
   };
 
@@ -83,12 +83,13 @@ export function MainMenu() {
     if (dirty && !window.confirm("Tienes cambios sin guardar. ¿Deseas salir de todas formas?")) {
       return;
     }
-    clearCurrentProject();
     navigate({ to: "/" });
     setOpen(false);
   };
 
-  const recentList = listLocalProjects().slice(0, 8);
+  const recentList: RecentItem[] = [
+    { id: project.name || "default", name: project.name || "Sin título", updatedAt: Date.now() },
+  ];
 
   return (
     <div className="relative inline-block" ref={menuRef}>
@@ -193,7 +194,7 @@ export function MainMenu() {
                 type="button"
                 role="menuitem"
                 onClick={() => {
-                  dispatch({ type: "openDialog", dialog: "projectProperties" });
+                  dispatch({ type: "openDialog", dialog: { name: "sceneProperties" } });
                   setOpen(false);
                 }}
                 className="flex items-center gap-2 rounded px-2 py-1.5 text-left text-foreground hover:bg-elevated"
@@ -223,28 +224,22 @@ export function MainMenu() {
               >
                 <ChevronLeft className="h-3 w-3" /> Atrás
               </button>
-              {recentList.length === 0 ? (
-                <div className="px-2 py-3 text-center text-muted-foreground">No hay proyectos recientes</div>
-              ) : (
-                recentList.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => {
-                      setCurrentProject(item.id);
-                      dispatch({ type: "loadProject", project: item.project });
-                      toast.success(`Cargado: ${item.name}`);
-                      setOpen(false);
-                    }}
-                    className="flex flex-col rounded px-2 py-1 text-left text-foreground hover:bg-elevated"
-                  >
-                    <span className="truncate font-medium">{item.name}</span>
-                    <span className="text-[10px] text-muted-foreground">
-                      {new Date(item.updatedAt).toLocaleDateString()}
-                    </span>
-                  </button>
-                ))
-              )}
+              {recentList.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    toast.info(`Proyecto activo: ${item.name}`);
+                    setOpen(false);
+                  }}
+                  className="flex flex-col rounded px-2 py-1 text-left text-foreground hover:bg-elevated"
+                >
+                  <span className="truncate font-medium">{item.name}</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {new Date(item.updatedAt).toLocaleDateString()}
+                  </span>
+                </button>
+              ))}
             </div>
           )}
 
@@ -271,7 +266,7 @@ export function MainMenu() {
               <button
                 type="button"
                 onClick={() => {
-                  toast.info("Generador de APK / Capacitor en camino.");
+                  toast.info("Generador de APK / Capacitor disponible próximamente.");
                   setOpen(false);
                 }}
                 className="flex items-center gap-2 rounded px-2 py-1.5 text-foreground hover:bg-elevated"
