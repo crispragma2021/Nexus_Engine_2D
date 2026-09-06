@@ -3,7 +3,8 @@
 // a "+" menu with the scenes and project tabs).
 
 import { useState } from "react";
-import { Ellipsis, GripVertical, HelpCircle, Plus, Save, Settings, X } from "lucide-react";
+import { useNavigate } from "@tanstack/react-router";
+import { ArrowLeft, Ellipsis, GripVertical, HelpCircle, Plus, Save, Settings, X } from "lucide-react";
 import { useEditor } from "@/lib/editor/store";
 import { S } from "@/lib/editor/i18n";
 import { BRAND } from "@/lib/editor/brand";
@@ -13,6 +14,7 @@ import { GdMenu, type MenuEntry } from "./gd/kit";
 import { NexusMark } from "@/components/brand/NexusLogo";
 
 export function ProjectTitlebar() {
+  const navigate = useNavigate();
   const { ui, dispatch, project, activeSceneName, dirty } = useEditor();
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [saving, setSaving] = useState(false);
@@ -73,6 +75,18 @@ export function ProjectTitlebar() {
 
   return (
     <div className="flex h-8 shrink-0 items-stretch gap-0 overflow-hidden bg-toolbar pl-1 text-foreground">
+      <button
+        type="button"
+        data-editor-home-button
+        aria-label={`${S.home} — Volver al Dashboard`}
+        title={`${S.home} — Volver al Dashboard`}
+        onClick={() => navigate({ to: "/" })}
+        className="mr-1 flex shrink-0 items-center gap-1 rounded px-1.5 text-muted-foreground hover:bg-elevated hover:text-foreground"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        <span className="hidden md:inline">{S.home}</span>
+      </button>
+
       <button
         type="button"
         aria-label={S.projectManager}

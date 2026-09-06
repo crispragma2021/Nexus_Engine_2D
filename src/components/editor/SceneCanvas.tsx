@@ -25,6 +25,7 @@ import {
   type CanvasGestureStart,
   type CanvasPoint,
 } from "@/lib/editor/canvas-gestures";
+import { SceneViewToolbar } from "./SceneViewToolbar";
 
 const HANDLE = 7;
 const WHEEL_ZOOM_FACTOR = 1.7 ** (1 / 16);
@@ -1012,6 +1013,7 @@ export function SceneCanvas() {
           onDoubleClick={onDoubleClick}
           onContextMenu={(event) => open(event, contextMenuEntries(event))}
         />
+          <SceneViewToolbar onFit={fitWindow} />
       </div>
       <StatusBar onFitWindow={fitWindow} />
       {menu}
