@@ -5,6 +5,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
+import { fileURLToPath } from "node:url";
 
 const execAsync = promisify(exec);
 const SOCKET_PATH = "/data/data/com.termux/files/home/.nexus_host.sock";
@@ -203,7 +204,23 @@ const tools = [
       },
     },
   },
-  {
+    {
+    type: "function",
+    function: {
+      name: "patch_file",
+      description: "Aplica un reemplazo exacto (Search and Replace) dentro de un archivo existente sin sobreescribirlo por completo.",
+      parameters: {
+        type: "object",
+        properties: {
+          file_path: { type: "string", description: "Ruta del archivo a modificar" },
+          search: { type: "string", description: "Texto exacto que se desea encontrar y reemplazar" },
+          replace: { type: "string", description: "Texto nuevo de sustitución" }
+        },
+        required: ["file_path", "search", "replace"]
+      }
+    }
+  },
+{
     type: "function",
     function: {
       name: "write_file",
@@ -241,6 +258,23 @@ REGLA ESTRICTA: Ejecuta las herramientas de inmediato. Registra en memoria (memo
   },
 ];
 
+
+async function runQuickIntegrityCheck(filePath) {
+  if (!filePath.endsWith(".ts") && !filePath.endsWith(".tsx") && !filePath.endsWith(".js") && !filePath.endsWith(".jsx")) {
+    return "";
+  }
+  try {
+    const { stdout, stderr } = await execAsync("node --check " + filePath + " 2>&1 || true", { cwd: process.cwd() });
+    const output = (stdout + stderr).trim();
+    if (output && output.toLowerCase().includes("syntaxerror")) {
+      return "\n[ALERTA DE AUTOCORRECCIÓN]: Se detectó un error sintáctico tras el cambio:\n" + output;
+    }
+  } catch (e) {
+    return "\n[ALERTA]: " + e.message;
+  }
+  return "";
+}
+
 async function handleToolCall(fnName, args) {
   try {
     if (fnName === "host_tap_normalized") {
@@ -265,10 +299,12 @@ async function handleToolCall(fnName, args) {
       return await readRecentMemory(args.limit || 5);
     }
     if (fnName === "run_project_tests") {
-      const target = args.test_file || "tests/agent-*.test.ts";
+      const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+      const clean = (args.test_file || "").replace(/^.*[\\/]/, "");
+      const target = clean ? `tests/${clean}` : "tests/*.test.mjs tests/*.test.ts";
       const { stdout, stderr } = await execAsync(
-        `npx vitest run ${target} 2>&1 || npx ts-node --esm ${target} 2>&1 || npm test 2>&1`,
-        { cwd: process.cwd(), timeout: 45000 },
+        `node --experimental-strip-types --test ${target} 2>&1`,
+        { cwd: repoRoot, timeout: 120000 },
       );
       return (stdout || stderr || "Tests ejecutados.").trim();
     }
@@ -277,11 +313,26 @@ async function handleToolCall(fnName, args) {
       if (!fs.existsSync(resolved)) return `Error: El archivo ${args.file_path} no existe.`;
       return fs.readFileSync(resolved, "utf-8");
     }
+        if (fnName === "patch_file") {
+      const resolved = path.resolve(process.cwd(), args.file_path);
+      if (!fs.existsSync(resolved)) return `Error: El archivo ${args.file_path} no existe.`;
+      const original = fs.readFileSync(resolved, "utf-8");
+      if (!original.includes(args.search)) {
+        return `Error: No se encontró la cadena exacta de búsqueda en ${args.file_path}. Asegúrate de copiar el bloque idéntico.`;
+      }
+      const occurrences = original.split(args.search).length - 1;
+      if (occurrences > 1) {
+        return `Error: La cadena de búsqueda aparece ${occurrences} veces en el archivo. Proporciona más contexto alrededor para que sea única.`;
+      }
+      const updated = original.replace(args.search, args.replace);
+      fs.writeFileSync(resolved, updated, "utf-8");
+      const check = await runQuickIntegrityCheck(resolved); return `Archivo ${args.file_path} parcheado con éxito (1 bloque reemplazado).${check}`;
+    }
     if (fnName === "write_file") {
       const resolved = path.resolve(process.cwd(), args.file_path);
       fs.mkdirSync(path.dirname(resolved), { recursive: true });
       fs.writeFileSync(resolved, args.content, "utf-8");
-      return `Archivo ${args.file_path} guardado correctamente.`;
+      const check = await runQuickIntegrityCheck(resolved); return `Archivo ${args.file_path} guardado correctamente.${check}`;
     }
     if (fnName === "execute_shell") {
       const { stdout, stderr } = await execAsync(args.command, {
@@ -321,7 +372,20 @@ async function chatTurn() {
   return data.choices?.[0]?.message;
 }
 
-const rl = readline.createInterface({
+
+const cliArgs = process.argv.slice(2).filter(a => !a.startsWith("-")).join(" ").trim();
+if (cliArgs) {
+  (async () => {
+    try {
+      console.log("[deep] Procesando orden directa:", cliArgs);
+      await runAgentLoop(cliArgs);
+    } catch (err) {
+      console.error("[deep] Error:", err.message);
+    }
+    process.exit(0);
+  })();
+} else {
+  const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
   prompt: "\x1b[36mbuilder-agent>\x1b[0m ",
@@ -382,3 +446,5 @@ rl.on("line", async (line) => {
   console.log("\x1b[32m\n=== SESIÓN FINALIZADA ===\x1b[0m");
   process.exit(0);
 });
+
+}

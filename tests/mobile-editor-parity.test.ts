@@ -16,7 +16,7 @@ test("the permanent mobile dock exposes the five GDevelop scene tools", async ()
   assert.match(source, /<LayersPanel onClose=/);
 });
 
-test("mobile drawers and AI overlays stop above the fixed dock", async () => {
+test("mobile dock panels and contextual AI popovers stop above the fixed dock", async () => {
   const [styles, shell, dock, automation, inlinePrompt] = await Promise.all([
     read("../src/styles.css"),
     read("../src/components/editor/EditorShell.tsx"),
@@ -28,9 +28,14 @@ test("mobile drawers and AI overlays stop above the fixed dock", async () => {
   assert.match(styles, /--mobile-editor-dock-height:/);
   assert.match(shell, /pb-\[var\(--mobile-editor-dock-height\)\] md:pb-0/);
   assert.match(dock, /bottom-\[var\(--mobile-editor-dock-height\)\] z-30/);
+  // The QuickAutomation drawer is a full-height bottom sheet (bottom-0, above
+  // the dock z-index) that intentionally overlays the dock for max space.
   assert.match(automation, /data-ai-overlay="drawer"/);
-  assert.match(automation, /bottom-\[var\(--mobile-editor-dock-height\)\]/);
+  assert.match(automation, /fixed inset-x-0 bottom-0/);
+  assert.match(automation, /md:bottom-4/);
+  // Everything that must coexist with the dock stops right above it.
   assert.match(inlinePrompt, /data-ai-overlay="contextual-popover"/);
+  assert.match(inlinePrompt, /bottom-\[calc\(var\(--mobile-editor-dock-height\)/);
 });
 
 test("the scene canvas declares explicit one- and two-finger arbitration", async () => {
