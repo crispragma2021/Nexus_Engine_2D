@@ -135,8 +135,8 @@ export function ShareDialog({ open, onClose, initialTab = "publish" }: ShareDial
               {/* Escritorio */}
               <button
                 type="button"
-                onClick={() => toast.info("Exportación de escritorio próximamente.")}
-                className="w-full text-left rounded-lg border border-[#2E2E3C] bg-[#242432] p-3 hover:bg-[#2B2B3C] transition-colors group"
+                disabled
+                className="w-full text-left rounded-lg border border-[#2E2E3C] bg-[#242432] p-3 hover:bg-[#2B2B3C] transition-colors group disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -153,8 +153,8 @@ export function ShareDialog({ open, onClose, initialTab = "publish" }: ShareDial
               {/* Android */}
               <button
                 type="button"
-                onClick={() => toast.info("Empaquetado Android disponible pronto.")}
-                className="w-full text-left rounded-lg border border-[#2E2E3C] bg-[#242432] p-3 hover:bg-[#2B2B3C] transition-colors group"
+                disabled
+                className="w-full text-left rounded-lg border border-[#2E2E3C] bg-[#242432] p-3 hover:bg-[#2B2B3C] transition-colors group disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -182,10 +182,8 @@ export function ShareDialog({ open, onClose, initialTab = "publish" }: ShareDial
               </div>
               <button
                 type="button"
-                onClick={() =>
-                  toast.info("Gestión de equipos disponible en próxima actualización.")
-                }
-                className="rounded-md bg-[#7046EC] px-4 py-2 text-xs font-semibold text-white hover:bg-[#5E34D9] transition-colors"
+                disabled
+                className="rounded-md bg-[#7046EC] px-4 py-2 text-xs font-semibold text-white hover:bg-[#5E34D9] transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Crear enlace de invitación
               </button>
