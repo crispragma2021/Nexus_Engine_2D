@@ -77,7 +77,13 @@ export function ProjectTitlebar() {
   return (
     <div className="flex h-8 shrink-0 items-stretch gap-0 overflow-hidden bg-toolbar pl-1 text-foreground">
       <MainMenu />
-      
+
+      <span
+        className="mr-1 flex min-w-0 max-w-24 shrink-0 items-center truncate border-r border-[#2c2c36] pl-0.5 pr-2 text-[12px] font-medium text-foreground md:max-w-48"
+        title={project.name}
+      >
+        {project.name}
+      </span>
 
       <button
         type="button"
@@ -162,7 +168,7 @@ export function ProjectTitlebar() {
             {dirty ? "Sin guardar" : "Guardado"}
           </span>
         </button>
-        
+
         <a
           href="https://gdevelop.io"
           target="_blank"
