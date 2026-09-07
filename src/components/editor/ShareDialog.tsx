@@ -176,12 +176,15 @@ export function ShareDialog({ open, onClose, initialTab = "publish" }: ShareDial
               <div>
                 <h3 className="text-sm font-medium text-white">Trabaja en equipo</h3>
                 <p className="text-xs text-[#8E8E9E] max-w-xs mt-1">
-                  Invita a colaboradores para editar escenas, scripts y recursos de forma compartida.
+                  Invita a colaboradores para editar escenas, scripts y recursos de forma
+                  compartida.
                 </p>
               </div>
               <button
                 type="button"
-                onClick={() => toast.info("Gestión de equipos disponible en próxima actualización.")}
+                onClick={() =>
+                  toast.info("Gestión de equipos disponible en próxima actualización.")
+                }
                 className="rounded-md bg-[#7046EC] px-4 py-2 text-xs font-semibold text-white hover:bg-[#5E34D9] transition-colors"
               >
                 Crear enlace de invitación

@@ -206,7 +206,9 @@ export function MainMenu() {
                 disabled={!isEditor}
                 onClick={onSave}
                 className={`flex w-full items-center gap-2.5 px-4 py-2 ${
-                  isEditor ? "text-[#D2D2D9] hover:bg-[#2A2A38] hover:text-white" : "text-[#555562] cursor-not-allowed"
+                  isEditor
+                    ? "text-[#D2D2D9] hover:bg-[#2A2A38] hover:text-white"
+                    : "text-[#555562] cursor-not-allowed"
                 }`}
               >
                 <Save className="h-4 w-4 text-[#8E8E9A]" />
@@ -221,7 +223,9 @@ export function MainMenu() {
                   toast.info("Para guardar una copia, usa Exportar como ZIP.");
                 }}
                 className={`flex w-full items-center gap-2.5 px-4 py-2 ${
-                  isEditor ? "text-[#D2D2D9] hover:bg-[#2A2A38] hover:text-white" : "text-[#555562] cursor-not-allowed"
+                  isEditor
+                    ? "text-[#D2D2D9] hover:bg-[#2A2A38] hover:text-white"
+                    : "text-[#555562] cursor-not-allowed"
                 }`}
               >
                 <SaveAll className="h-4 w-4 text-[#8E8E9A]" />
@@ -236,7 +240,9 @@ export function MainMenu() {
                   toast.info("El historial de versiones estará disponible pronto.");
                 }}
                 className={`flex w-full items-center gap-2.5 px-4 py-2 ${
-                  isEditor ? "text-[#D2D2D9] hover:bg-[#2A2A38] hover:text-white" : "text-[#555562] cursor-not-allowed"
+                  isEditor
+                    ? "text-[#D2D2D9] hover:bg-[#2A2A38] hover:text-white"
+                    : "text-[#555562] cursor-not-allowed"
                 }`}
               >
                 <History className="h-4 w-4 text-[#8E8E9A]" />
@@ -250,7 +256,9 @@ export function MainMenu() {
                 disabled={!isEditor}
                 onClick={() => openShare("invite")}
                 className={`flex w-full items-center gap-2.5 px-4 py-2 ${
-                  isEditor ? "text-[#D2D2D9] hover:bg-[#2A2A38] hover:text-white" : "text-[#555562] cursor-not-allowed"
+                  isEditor
+                    ? "text-[#D2D2D9] hover:bg-[#2A2A38] hover:text-white"
+                    : "text-[#555562] cursor-not-allowed"
                 }`}
               >
                 <Share2 className="h-4 w-4 text-[#8E8E9A]" />
@@ -262,7 +270,9 @@ export function MainMenu() {
                 disabled={!isEditor}
                 onClick={() => openShare("publish")}
                 className={`flex w-full items-center gap-2.5 px-4 py-2 ${
-                  isEditor ? "text-[#D2D2D9] hover:bg-[#2A2A38] hover:text-white" : "text-[#555562] cursor-not-allowed"
+                  isEditor
+                    ? "text-[#D2D2D9] hover:bg-[#2A2A38] hover:text-white"
+                    : "text-[#555562] cursor-not-allowed"
                 }`}
               >
                 <Share2 className="h-4 w-4 text-[#8E8E9A]" />
@@ -276,7 +286,9 @@ export function MainMenu() {
                 disabled={!isEditor}
                 onClick={onCloseProject}
                 className={`flex w-full items-center gap-2.5 px-4 py-2 ${
-                  isEditor ? "text-[#D2D2D9] hover:bg-[#2A2A38] hover:text-white" : "text-[#555562] cursor-not-allowed"
+                  isEditor
+                    ? "text-[#D2D2D9] hover:bg-[#2A2A38] hover:text-white"
+                    : "text-[#555562] cursor-not-allowed"
                 }`}
               >
                 <LogOut className="h-4 w-4 text-[#8E8E9A]" />

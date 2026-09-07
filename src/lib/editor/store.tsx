@@ -87,8 +87,7 @@ export type EditorDialog =
       name: "instruction";
       eventId: string;
       slot: "conditions" | "actions";
-      instructionId: string | { name: "share"; tab: "publish" | "invite" }
-  | null;
+      instructionId: string | { name: "share"; tab: "publish" | "invite" } | null;
     }
   | { name: "externalEvents"; eventsName: string }
   | { name: "share"; tab: "publish" | "invite" }

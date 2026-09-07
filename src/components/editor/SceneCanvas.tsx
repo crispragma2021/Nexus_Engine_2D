@@ -1001,7 +1001,7 @@ export function SceneCanvas() {
           onDoubleClick={onDoubleClick}
           onContextMenu={(event) => open(event, contextMenuEntries(event))}
         />
-          <SceneViewToolbar onFit={fitWindow} />
+        <SceneViewToolbar onFit={fitWindow} />
       </div>
       <StatusBar onFitWindow={fitWindow} />
       {menu}
