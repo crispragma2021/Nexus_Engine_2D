@@ -326,7 +326,7 @@ export function QuickAutomationBar() {
       <button
         type="button"
         onClick={() => dispatch({ type: "ui", patch: { quickAutomationOpen: true } })}
-        className="fixed right-3 bottom-[calc(var(--mobile-editor-dock-height)+0.75rem)] z-[25] flex h-10 w-10 items-center justify-center rounded-full border border-separator bg-[#1D1D26]/90 text-text-secondary shadow-lg backdrop-blur hover:border-[#6868E8] hover:text-foreground md:right-auto md:bottom-4 md:left-1/2 md:h-auto md:w-auto md:-translate-x-1/2 md:gap-1 md:px-2.5 md:py-1 md:text-[10.5px]"
+        className="fixed right-3 bottom-[calc(var(--mobile-editor-dock-height)+0.75rem)] z-[25] hidden md:flex h-10 w-10 items-center justify-center rounded-full border border-separator bg-[#1D1D26]/90 text-text-secondary shadow-lg backdrop-blur hover:border-[#6868E8] hover:text-foreground md:right-auto md:bottom-4 md:left-1/2 md:h-auto md:w-auto md:-translate-x-1/2 md:gap-1 md:px-2.5 md:py-1 md:text-[10.5px]"
         title="Automatización rápida (Ctrl/Cmd+K)"
       >
         <Sparkles className="h-4 w-4 text-[#A996FF] md:h-3 md:w-3" />
@@ -343,11 +343,11 @@ export function QuickAutomationBar() {
       aria-modal="false"
       aria-label="Automatización rápida"
       data-ai-overlay="drawer"
-      className="fixed inset-x-0 bottom-[var(--mobile-editor-dock-height)] z-[35] w-full md:inset-x-auto md:bottom-4 md:left-1/2 md:w-[min(720px,calc(100vw-1rem))] md:-translate-x-1/2"
+      className="fixed inset-x-0 bottom-0 z-[60] w-full md:inset-x-auto md:bottom-4 md:left-1/2 md:w-[min(720px,calc(100vw-1rem))] md:-translate-x-1/2"
     >
       <form
         onSubmit={submit}
-        className="max-h-[calc(100dvh-var(--mobile-editor-dock-height)-1rem)] overflow-y-auto rounded-t-xl border border-[#494952] bg-[#17171F]/95 shadow-2xl backdrop-blur-xl md:max-h-[calc(100dvh-2rem)] md:rounded-xl"
+        className="max-h-[calc(100dvh-1rem)] overflow-y-auto rounded-t-xl border border-[#494952] bg-[#17171F]/95 shadow-2xl backdrop-blur-xl md:max-h-[calc(100dvh-2rem)] md:rounded-xl"
       >
         <div className="flex items-center gap-1 border-b border-separator px-2 py-1.5">
           <Sparkles className="mr-1 h-4 w-4 text-[#A996FF]" />
