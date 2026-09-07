@@ -17,6 +17,7 @@ import {
   type SnapshotMode,
 } from "@/lib/agent/session";
 import { planFromModel } from "@/lib/agent/model";
+import { DEEPSEEK_BASE_URL, DEFAULT_DEEPSEEK_MODEL } from "@/lib/agent/deepseek-client";
 import { TOOL_REGISTRY } from "@/lib/agent/tools";
 import type { AgentPlan } from "@/lib/agent/operations";
 import { useAgentCommit } from "./hooks/use-agent-commit";
@@ -71,8 +72,8 @@ export function AgentPanel() {
    *  is never persisted, only used in the outgoing request (same pattern as
    *  the sprite-generation flow). */
   const [showModelConfig, setShowModelConfig] = React.useState(false);
-  const [endpoint, setEndpoint] = React.useState("");
-  const [modelName, setModelName] = React.useState("");
+  const [endpoint, setEndpoint] = React.useState(DEEPSEEK_BASE_URL);
+  const [modelName, setModelName] = React.useState(DEFAULT_DEEPSEEK_MODEL);
   const [token, setToken] = React.useState("");
   const inputRef = React.useRef<HTMLInputElement>(null);
   const bottomRef = React.useRef<HTMLDivElement>(null);
@@ -342,10 +343,10 @@ export function AgentPanel() {
               <li>«Cuando Jugador colisiona con Moneda, destruye Moneda»</li>
             </ul>
             <p className="mt-2 text-[10.5px]">
-              Todo pasa por validación y se aplica como transacción atómica con deshacer. Sin
-              endpoint de IA configurado, usa el planificador determinista local; con uno, el modelo
-              solo propone planes (nunca toca el proyecto directamente). El agente no publica nada
-              automáticamente.
+              Todo pasa por validación y se aplica como transacción atómica con deshacer. Por
+              defecto usa DeepSeek (<span className="text-text-foreground">deepseek-chat</span>); el
+              modelo solo propone planes (nunca toca el proyecto directamente). El agente no publica
+              nada automáticamente.
             </p>
           </div>
         ) : (
@@ -468,8 +469,11 @@ export function AgentPanel() {
         {showModelConfig ? (
           <div className="space-y-1 border-t border-separator px-3 py-2">
             <p className="text-[9.5px] leading-snug text-text-placeholder">
-              Endpoint compatible con OpenAI (HTTPS). El token solo se usa en la solicitud y no se
-              guarda. Sin endpoint, el agente usa el planificador determinista local.
+              Configuración por defecto: DeepSeek (endpoint{" "}
+              <span className="text-text-secondary">https://api.deepseek.com</span> y modelo{" "}
+              <span className="text-text-secondary">deepseek-chat</span>). El token (API key) solo
+              se usa en la solicitud y no se guarda. Sin endpoint, el agente usa el planificador
+              determinista local.
             </p>
             <input
               value={endpoint}

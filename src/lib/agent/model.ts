@@ -273,6 +273,19 @@ export function parseModelPlan(raw: unknown, project: GDProject): LlmPlanResult 
  * HTTP orchestration
  * ---------------------------------------------------------------------- */
 
+/**
+ * Resuelve un endpoint OpenAI-compatible a la URL de chat-completions.
+ * Acepta tanto una URL completa (`…/chat/completions`) como una URL base
+ * (p. ej. `https://api.deepseek.com` o `https://api.openai.com/v1`) y añade
+ * la ruta estándar `/chat/completions` cuando falta.
+ */
+export function resolveChatEndpoint(raw: string): string {
+  const trimmed = raw.trim();
+  const base = trimmed.replace(/\/+$/, "");
+  if (/\/completions$/i.test(base)) return trimmed;
+  return `${base}/chat/completions`;
+}
+
 function safeEndpoint(url: string): { url?: string; reason?: string } {
   let parsed: URL;
   try {
@@ -293,7 +306,7 @@ function safeEndpoint(url: string): { url?: string; reason?: string } {
  * and never appears in returned reasons, logs or the audit trail.
  */
 export async function planFromModel(request: LlmPlanRequest): Promise<LlmPlanResult> {
-  const { url, reason } = safeEndpoint(request.provider.endpoint.trim());
+  const { url, reason } = safeEndpoint(resolveChatEndpoint(request.provider.endpoint));
   if (!url) return { plan: null, reason: reason ?? "El endpoint del modelo no es válido." };
 
   const timeoutMs = Math.min(
