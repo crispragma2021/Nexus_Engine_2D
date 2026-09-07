@@ -277,8 +277,8 @@ export function TopToolbar() {
         <div className="min-w-2 flex-1" />
 
         <IconButton
-          label={`Automatización rápida (Ctrl/Cmd+K)`}
-          active={ui.quickAutomationOpen || ui.inlineAi !== null}
+          label="Asistente Agente (Automatización IA)"
+          active={ui.quickAutomationOpen}
           onClick={() =>
             dispatch({
               type: "ui",
@@ -286,14 +286,7 @@ export function TopToolbar() {
             })
           }
         >
-          <Sparkles className="h-4 w-4" />
-        </IconButton>
-        <IconButton
-          label="Panel del agente (planos validados, transacción atómica)"
-          active={ui.agentPanelOpen}
-          onClick={() => dispatch({ type: "ui", patch: { agentPanelOpen: !ui.agentPanelOpen } })}
-        >
-          <Bot className="h-4 w-4" />
+          <Bot className="h-4 w-4 text-[#A996FF]" />
         </IconButton>
         <Sep />
 
