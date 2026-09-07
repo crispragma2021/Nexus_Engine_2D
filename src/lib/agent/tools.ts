@@ -27,6 +27,7 @@ import type {
 import { uid } from "../editor/ids.ts";
 import { newNameGenerator } from "../editor/ids.ts";
 import { BASE_LAYER_NAME, makeScene, withScene } from "../editor/scenes.ts";
+import { instructionContractError, type InstructionRefs } from "../editor/ai-logic.ts";
 import {
   BEHAVIOR_DEFAULT_PROPERTIES,
   isCatalogOnlyBehavior,
@@ -237,11 +238,24 @@ const toInstruction = (payload: InstructionPayload): GDInstruction => ({
   parameters: payload.parameters ?? {},
 });
 
-const validateInstructions = (instructions: unknown, label: string): string | null => {
+const validateInstructions = (
+  instructions: unknown,
+  label: string,
+  expectedSlot: "condition" | "action",
+  scene: GDScene | null,
+  project: GDProject,
+): string | null => {
   if (instructions === undefined) return null;
   if (!Array.isArray(instructions) || instructions.length > 50) {
     return `${label}: lista de instrucciones no válida (máximo 50).`;
   }
+    const refs: InstructionRefs = {
+    objectNames: scene?.objects.map((object) => object.name) ?? [],
+    sceneNames: project.scenes.map((entry) => entry.name),
+    audioResources: project.resources
+      .filter((resource) => resource.kind === "audio")
+      .map((resource) => resource.name),
+  };
   for (const item of instructions) {
     if (!isRecord(item) || typeof item["typeId"] !== "string") {
       return `${label}: cada instrucción necesita un typeId.`;
@@ -252,6 +266,13 @@ const validateInstructions = (instructions: unknown, label: string): string | nu
     if (item["parameters"] !== undefined && !isRecord(item["parameters"])) {
       return `${label}: los parámetros de «${item["typeId"]}» no son válidos.`;
     }
+    const contractError = instructionContractError(
+      item["typeId"],
+      expectedSlot,
+      (item["parameters"] ?? {}) as Record<string, string>,
+      refs,
+    );
+    if (contractError) return `${label}: ${contractError}`;
   }
   return null;
 };
@@ -1037,9 +1058,21 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
       const p = payload as unknown as CreateEventPayload;
       const scene = requireScene(project, p.sceneName);
       if (!scene) return `No existe la escena «${String(p.sceneName)}».`;
-      const conditionsError = validateInstructions(p.conditions, "create_event.conditions");
+      const conditionsError = validateInstructions(
+        p.conditions,
+        "create_event.conditions",
+        "condition",
+        scene,
+        project,
+      );
       if (conditionsError) return conditionsError;
-      const actionsError = validateInstructions(p.actions, "create_event.actions");
+      const actionsError = validateInstructions(
+        p.actions,
+        "create_event.actions",
+        "action",
+        scene,
+        project,
+      );
       if (actionsError) return actionsError;
       if (p.conditions === undefined && p.actions === undefined) {
         return "create_event: un evento necesita condiciones o acciones (o ambas).";
@@ -1078,9 +1111,21 @@ export const TOOL_REGISTRY: Record<string, ToolDefinition> = {
       if (!scene) return `No existe la escena «${String(p.sceneName)}».`;
       const event = findEvent(scene.events, p.eventId);
       if (!event) return `No existe el evento con id «${String(p.eventId)}».`;
-      const conditionsError = validateInstructions(p.conditions, "update_event.conditions");
+      const conditionsError = validateInstructions(
+        p.conditions,
+        "update_event.conditions",
+        "condition",
+        scene,
+        project,
+      );
       if (conditionsError) return conditionsError;
-      const actionsError = validateInstructions(p.actions, "update_event.actions");
+      const actionsError = validateInstructions(
+        p.actions,
+        "update_event.actions",
+        "action",
+        scene,
+        project,
+      );
       if (actionsError) return actionsError;
       if (p.conditions === undefined && p.actions === undefined && p.disabled === undefined) {
         return "update_event: indica qué cambiar (conditions, actions o disabled).";

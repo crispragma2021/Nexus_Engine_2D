@@ -206,6 +206,64 @@ export function supportedAiLogicInstructions(): string[] {
   return Object.keys(SCHEMA);
 }
 
+/** Referencias del proyecto contra las que se validan las instrucciones. */
+export interface InstructionRefs {
+  /** Nombres de objetos existentes en la escena destino. */
+  objectNames: readonly string[];
+  sceneNames?: readonly string[];
+  audioResources?: readonly string[];
+}
+
+/**
+ * Contrato paramétrico compartido entre el compilador determinista y el
+ * agente (tools.ts). Para instrucciones con entrada en el SCHEMA valida slot
+ * (condición/acción) y claves required/allowed; además, para cualquier
+ * instrucción que traiga referencias (object/object2/scene/file) comprueba que
+ * apunten a objetos/escenas/audios que existen en el proyecto.
+ *
+ * Devuelve un mensaje de error en español o null si la instrucción es válida.
+ */
+export function instructionContractError(
+  typeId: string,
+  expectedSlot: "condition" | "action",
+  parameters: Readonly<Record<string, string>> | undefined,
+  refs: InstructionRefs,
+): string | null {
+  const params = parameters ?? {};
+
+  const schema = SCHEMA[typeId];
+  if (schema) {
+    if (schema.slot !== expectedSlot) {
+      return `La instrucción «${typeId}» debe ir en ${schema.slot === "condition" ? "condiciones" : "acciones"}.`;
+    }
+    const disallowed = Object.keys(params).filter((key) => !schema.allowed.includes(key));
+    if (disallowed.length > 0) {
+      return `Parámetro no permitido en ${typeId}: ${disallowed[0]}.`;
+    }
+    for (const required of schema.required) {
+      if (!String(params[required] ?? "").trim()) {
+        return `Falta el parámetro ${required} en ${typeId}.`;
+      }
+    }
+  }
+
+  for (const key of ["object", "object2"] as const) {
+    const value = params[key];
+    if (value && !refs.objectNames.includes(value)) {
+      return `El objeto «${value}» no existe en la escena.`;
+    }
+  }
+  const scene = params["scene"];
+  if (scene && refs.sceneNames && !refs.sceneNames.includes(scene)) {
+    return `La escena «${scene}» no existe.`;
+  }
+  const file = params["file"];
+  if (file && refs.audioResources && !refs.audioResources.includes(file)) {
+    return `El audio «${file}» no existe en los recursos.`;
+  }
+  return null;
+}
+
 function compileConditions(normalized: string, context: AiLogicContext): GDInstruction[] {
   const every = normalized.match(/\bcada\s+(\d+(?:[.,]\d+)?)\s*(?:segundos?|s)\b/);
   if (every?.[1]) {

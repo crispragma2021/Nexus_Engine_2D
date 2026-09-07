@@ -8,24 +8,61 @@ if (!prompt) {
   process.exit(1);
 }
 
-// Proyecto base mínimo para pruebas
+// Proyecto base mínimo para pruebas. Debe ser un GDProject completo porque el
+// gateway unificado (model.ts) construye el contexto desde gameSettings,
+// resources, escenas, etc.
 const dummyProject = {
   name: "Nexus Project",
   version: "1.0.0",
+  firstLayoutName: "Escena 1",
   scenes: [
     {
       name: "Escena 1",
       backgroundColor: "20;20;30",
+      grid: { show: false, snap: false, width: 32, height: 32, kind: "rectangular", color: "158;180;255", alpha: 0.8, offsetX: 0, offsetY: 0 },
+      layers: [{ name: "Base layer", visible: true, camera: { x: 0, y: 0 }, effects: [] }],
+      activeLayer: "Base layer",
       objects: [],
       instances: [],
-      layers: [{ name: "Base", cameraCount: 1 }],
       events: [],
-      groups: [],
       variables: [],
+      groups: [],
     },
   ],
-  globalVariables: [],
+  gameSettings: {
+    author: "test",
+    description: "",
+    version: "1.0.0",
+    packageName: "com.nexus.test",
+    orientation: "landscape",
+    windowWidth: 800,
+    windowHeight: 600,
+    useWindowSizeAsBaseSize: true,
+    magnification: 1,
+    minFPS: 30,
+    maxFPS: 60,
+    adaptGameResolutionAtRuntime: false,
+    scaleMode: "nearest",
+    windowMode: "default",
+    startScene: "Escena 1",
+    pauseOnLostFocus: false,
+    renderOutsideGameArea: false,
+    loadingScreen: {
+      displayBrandSplash: false,
+      minDuration: 0,
+      fadeInDuration: 0,
+      fadeOutDuration: 0,
+      backgroundColor: "0;0;0",
+    },
+    watermark: { showOnMobile: false },
+    projectUuid: "test",
+    folderPolicy: "doNotUse",
+  },
   resources: [],
+  globalVariables: [],
+  extensions: [],
+  externalEvents: [],
+  externalLayouts: [],
 };
 
 console.log(`[DeepSeek Agent] Procesando: "${prompt}"...`);

@@ -1,101 +1,57 @@
 import type { GDProject } from "../editor/types.ts";
 import type { AgentPlan } from "./operations.ts";
-import { validatePlan } from "./validator.ts";
-import { TOOL_NAMES } from "./tools.ts";
+import { planFromModel, type LlmProviderConfig } from "./model.ts";
 
-const DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions";
-
-const SYSTEM_PROMPT = `Eres el asistente de arquitectura y edición para Nexus Engine 2D.
-Tu objetivo es transformar las instrucciones del usuario en un plan estructurado (AgentPlan) con mutaciones seguras sobre el proyecto.
-
-Herramientas disponibles:
-${TOOL_NAMES.join(", ")}
-
-Responde ÚNICAMENTE un objeto JSON válido con la siguiente estructura:
-{
-  "id": "plan_<identificador_unico>",
-  "summary": "Resumen conciso en español de las acciones tomadas",
-  "operations": [
-    {
-      "id": "op_1",
-      "version": 1,
-      "type": "nombre_de_la_herramienta",
-      "payload": { ...parámetros de la herramienta... }
-    }
-  ]
-}`;
+/**
+ * Cliente DeepSeek unificado sobre `model.ts`.
+ *
+ * Históricamente este módulo duplicaba el gateway LLM (SYSTEM_PROMPT propio,
+ * fetch manual sin timeout, parseo sin strip de fences). Desde la unificación,
+ * `requestAgentPlan` delega en `planFromModel`: un único punto de verdad para
+ * construir el contexto/mensajes, timeout duro (AbortController), validación
+ * del endpoint (HTTPS/localhost), strip de fences markdown y re-registro de ids
+ * del plan. Esta capa solo aporta el endpoint y el modelo por defecto de
+ * DeepSeek, manteniendo la API pública que usan scripts/agent-cli.mjs.
+ */
+export const DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions";
+export const DEFAULT_DEEPSEEK_MODEL = "deepseek-chat";
+/** Timeout generoso por defecto para el planificador remoto de DeepSeek. */
+const DEEPSEEK_TIMEOUT_MS = 60_000;
 
 export interface GeneratePlanOptions {
   prompt: string;
   project: GDProject;
   apiKey?: string;
   model?: string;
+  /** Escena activa; se deduce del proyecto si no se indica. */
+  activeSceneName?: string;
 }
 
 export async function requestAgentPlan({
   prompt,
   project,
   apiKey = process.env["DEEPSEEK_API_KEY"],
-  model = "deepseek-chat",
+  model = DEFAULT_DEEPSEEK_MODEL,
+  activeSceneName,
 }: GeneratePlanOptions): Promise<{ plan: AgentPlan | null; error?: string }> {
   if (!apiKey) {
     return { plan: null, error: "DEEPSEEK_API_KEY no configurada." };
   }
 
-  const projectContext = {
-    name: project.name,
-    scenes: project.scenes.map((s) => ({
-      name: s.name,
-      objectsCount: s.objects.length,
-      instancesCount: s.instances.length,
-      objects: s.objects.map((o) => ({ id: o.id, name: o.name, type: o.type })),
-    })),
-  };
-
-  const body = {
+  const provider: LlmProviderConfig = {
+    endpoint: DEEPSEEK_API_URL,
     model,
-    temperature: 0.1,
-    response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      {
-        role: "user",
-        content: `Estado actual del proyecto:\n${JSON.stringify(projectContext, null, 2)}\n\nInstrucción: ${prompt}`,
-      },
-    ],
+    token: apiKey,
+    timeoutMs: DEEPSEEK_TIMEOUT_MS,
   };
+  const sceneName = activeSceneName ?? project.firstLayoutName ?? project.scenes[0]?.name ?? "";
+  const result = await planFromModel({
+    instruction: prompt,
+    project,
+    activeSceneName: sceneName,
+    provider,
+  });
 
-  try {
-    const response = await fetch(DEEPSEEK_API_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      return { plan: null, error: `Error HTTP ${response.status}: ${errText}` };
-    }
-
-    const data = await response.json();
-    const content = data.choices?.[0]?.message?.content;
-    if (!content) {
-      return { plan: null, error: "Respuesta vacía del modelo." };
-    }
-
-    const plan = JSON.parse(content) as AgentPlan;
-    const validation = validatePlan(plan, project);
-
-    if (!validation.ok) {
-      const issues = validation.errors.map((e) => e.message).join("; ");
-      return { plan: null, error: `Plan rechazado por el validador: ${issues}` };
-    }
-
-    return { plan };
-  } catch (err: unknown) {
-    return { plan: null, error: `Fallo de conexión o parseo: ${String(err)}` };
-  }
+  if (result.plan) return { plan: result.plan };
+  return { plan: null, error: result.reason ?? "No se pudo generar un plan con DeepSeek." };
 }

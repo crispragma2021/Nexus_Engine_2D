@@ -536,6 +536,53 @@ test("create_event / update_event / add_collision: solo instrucciones soportadas
 });
 
 // ---------------------------------------------------------------------------
+// M2: el contrato de instrucciones (SCHEMA de ai-logic) se valida en eventos
+// ---------------------------------------------------------------------------
+
+test("create_event: KeyPressed sin tecla se rechaza antes de mutar (contrato SCHEMA)", () => {
+  const project = fixtureProject();
+  const op = createOperation("create_event", {
+    sceneName: "Nivel 1",
+    conditions: [{ typeId: "KeyPressed" }],
+  });
+  const outcome = applyOperation(project, op);
+  assert.ok(outcome.diagnostics.some((d) => d.code === "invalid-payload"));
+  assert.match(
+    outcome.diagnostics.find((d) => d.code === "invalid-payload")!.message,
+    /Falta el parámetro key/,
+  );
+  // la escena no se mutó
+  assert.equal(sceneOf(outcome.project).events.length, 0);
+});
+
+test("create_event: Collision con objeto inexistente se rechaza (referencias vivas)", () => {
+  const project = fixtureProject();
+  const op = createOperation("create_event", {
+    sceneName: "Nivel 1",
+    conditions: [{ typeId: "Collision", parameters: { object: "Fantasma", object2: "Plataforma" } }],
+  });
+  const outcome = applyOperation(project, op);
+  assert.ok(outcome.diagnostics.some((d) => d.code === "invalid-payload"));
+  assert.match(
+    outcome.diagnostics.find((d) => d.code === "invalid-payload")!.message,
+    /no existe en la escena/,
+  );
+  assert.equal(sceneOf(outcome.project).events.length, 0);
+});
+
+test("create_event: condición que pide slot de acción se rechaza (slot SCHEMA)", () => {
+  const project = fixtureProject();
+  // Delete es una acción; en conditions debe rechazarse por slot.
+  const op = createOperation("create_event", {
+    sceneName: "Nivel 1",
+    conditions: [{ typeId: "Delete", parameters: { object: "Plataforma" } }],
+  });
+  const outcome = applyOperation(project, op);
+  assert.ok(outcome.diagnostics.some((d) => d.code === "invalid-payload"));
+  assert.equal(sceneOf(outcome.project).events.length, 0);
+});
+
+// ---------------------------------------------------------------------------
 // Validator
 // ---------------------------------------------------------------------------
 
