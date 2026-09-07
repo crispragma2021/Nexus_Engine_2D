@@ -1,4 +1,27 @@
 #!/usr/bin/env node
+
+async function loadLearnedRules() {
+  try {
+    const dbPath = path.join(process.env.HOME || "", "nexus_memory.db");
+    if (!fs.existsSync(dbPath)) return "";
+    const { stdout } = await execAsync("sqlite3 \"" + dbPath + "\" \"SELECT summary FROM builder_memory WHERE category='environment' ORDER BY id DESC LIMIT 5;\"");
+    const rules = stdout.trim().split("\n").filter(Boolean);
+    if (!rules.length) return "";
+    return "\n[REGLAS APRENDIDAS DEL ENTORNO LOCAL]:\n" + rules.map(r => "- " + r).join("\n");
+  } catch (_) {
+    return "";
+  }
+}
+
+// --- RESILIENCIA TERMUX: Gestor dinámico de rutas temporales ---
+function getSafeTempDir() {
+  const termuxTmp = process.env.TMPDIR || (process.env.PREFIX ? process.env.PREFIX + "/tmp" : null);
+  if (termuxTmp && fs.existsSync(termuxTmp)) return termuxTmp;
+  const homeTmp = path.join(process.env.HOME || "", ".tmp");
+  if (!fs.existsSync(homeTmp)) fs.mkdirSync(homeTmp, { recursive: true });
+  return homeTmp;
+}
+const SAFE_TMP_DIR = getSafeTempDir();
 import readline from "node:readline";
 import net from "node:net";
 import fs from "node:fs";
@@ -499,7 +522,7 @@ ${diffOutput.slice(0, 3500)}`;
     }
     if (fnName === "find_in_code") {
       const extFilter = args.extension ? `--include="*.${args.extension}"` : `--include="*.ts" --include="*.tsx" --include="*.js" --include="*.rs"`;
-      const cmd = `grep -rnE ${extFilter} "${args.query.replace(/"/g, "")}" src/ tests/ 2>/dev/null | head -n 25`;
+      const cmd = `rg -n --glob "!node_modules" --glob "!.git"E ${extFilter} "${args.query.replace(/"/g, "")}" src/ tests/ 2>/dev/null | head -n 25`;
       const { stdout } = await execAsync(cmd, { cwd: REPO_ROOT });
       return stdout.trim() || "No se encontraron coincidencias.";
     }
@@ -538,6 +561,39 @@ ${diffOutput.slice(0, 3500)}`;
 }
 
 async function chatTurn() {
+  // Construir historial estricto: solo pares asistente-herramienta completos
+  const cleanMessages = [];
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    if (m.role === "assistant" && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
+      const toolMap = new Map();
+      let j = i + 1;
+      while (j < messages.length && messages[j].role === "tool") {
+        toolMap.set(messages[j].tool_call_id, messages[j]);
+        j++;
+      }
+      const allFound = m.tool_calls.every(tc => toolMap.has(tc.id));
+      if (allFound) {
+        // Preservar reasoning_content requerido por thinking mode
+        const cleanAssistant = {
+          role: "assistant",
+          content: m.content || "",
+          tool_calls: m.tool_calls
+        };
+        if (m.reasoning_content !== undefined) {
+          cleanAssistant.reasoning_content = m.reasoning_content;
+        }
+        cleanMessages.push(cleanAssistant);
+        for (const tc of m.tool_calls) {
+          cleanMessages.push(toolMap.get(tc.id));
+        }
+        i = j - 1;
+      }
+    } else if (m.role !== "tool") {
+      cleanMessages.push(m);
+    }
+  }
+
   const res = await fetch(DEEPSEEK_BASE_URL + "/chat/completions", {
     method: "POST",
     headers: {
@@ -546,7 +602,7 @@ async function chatTurn() {
     },
     body: JSON.stringify({
       model: "deepseek-v4-flash",
-      messages,
+      messages: cleanMessages,
       tools,
       tool_choice: "auto",
       temperature: 0.1,
@@ -594,6 +650,19 @@ rl.on("line", async (line) => {
     process.exit(0);
   }
 
+    // Purgar mensajes rotos de turnos anteriores
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].role === "assistant" && messages[i].tool_calls) {
+      const ids = new Set(messages[i].tool_calls.map(tc => tc.id));
+      for (let j = i + 1; j < messages.length; j++) {
+        if (messages[j].role === "tool") ids.delete(messages[j].tool_call_id);
+      }
+      if (ids.size > 0) {
+        messages.splice(i);
+      }
+    }
+  }
+
   messages.push({ role: "user", content: input });
 
   try {
@@ -609,7 +678,12 @@ rl.on("line", async (line) => {
         const argDisplay = args.command || args.file_path || args.category || "";
 
         process.stdout.write(`\r\x1b[K\x1b[33m[Acción: ${fnName} ${argDisplay}]\x1b[0m\n`);
-        const result = await handleToolCall(fnName, args);
+                let result = "";
+        try {
+          result = await handleToolCall(fnName, args);
+        } catch (toolErr) {
+          result = "Error ejecutando " + fnName + ": " + (toolErr.message || String(toolErr));
+        }
 
         messages.push({
           role: "tool",
