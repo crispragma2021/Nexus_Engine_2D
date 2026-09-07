@@ -2,18 +2,58 @@
 import readline from "node:readline";
 import net from "node:net";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 
 const execAsync = promisify(exec);
+// Raíz del repositorio gestionado por el agente: siempre scripts/.. del propio
+// ejecutable, en lugar de process.cwd() (que depende del directorio de arranque).
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = path.resolve(SCRIPT_DIR, "..");
+// Fijar cwd al repo para que todas las tools (git, archivos, shell, búsqueda)
+// resuelvan rutas relativas contra el repositorio real del agente y no contra
+// el directorio desde el que se lanzó el daemon.
+try {
+  process.chdir(REPO_ROOT);
+} catch {}
 const SOCKET_PATH = "/data/data/com.termux/files/home/.nexus_host.sock";
 const DB_PATH = "/data/data/com.termux/files/home/nexus_memory.db";
-const API_KEY = process.env.DEEPSEEK_API_KEY;
+
+// Resuelve rutas relativas contra REPO_ROOT; las absolutas se respetan tal cual.
+function resolveRepoPath(p) {
+  return path.isAbsolute(p) ? p : path.resolve(REPO_ROOT, p);
+}
+
+// Secretos: prioriza process.env y, si faltan, hace fallback al vault local
+// (~/.nexus_secrets/deepseek.env) para arrancar sin depender del shell padre.
+function loadSecrets() {
+  const base = { apiKey: "", baseUrl: "https://api.deepseek.com" };
+  if (process.env.DEEPSEEK_API_KEY) {
+    base.apiKey = process.env.DEEPSEEK_API_KEY;
+    base.baseUrl = process.env.DEEPSEEK_BASE_URL || base.baseUrl;
+    return base;
+  }
+  try {
+    const vault = path.join(os.homedir(), ".nexus_secrets", "deepseek.env");
+    const content = fs.readFileSync(vault, "utf-8");
+    const grab = (k) => (content.match(new RegExp("^" + k + "\\s*=\\s*\"?([^\"\\n]+)\"?", "m")) || [])[1] || "";
+    base.apiKey = grab("DEEPSEEK_API_KEY");
+    base.baseUrl = grab("DEEPSEEK_BASE_URL") || base.baseUrl;
+  } catch {
+    // Sin vault disponible: se mantiene apiKey vacía y el check de abajo aborta.
+  }
+  return base;
+}
+
+const SECRETS = loadSecrets();
+const API_KEY = SECRETS.apiKey;
+const DEEPSEEK_BASE_URL = SECRETS.baseUrl;
 
 if (!API_KEY) {
-  console.error("\x1b[31mError: DEEPSEEK_API_KEY no definida en el entorno.\x1b[0m");
+  console.error("\x1b[31mError: DEEPSEEK_API_KEY no está definida ni en el entorno ni en ~/.nexus_secrets/deepseek.env.\x1b[0m");
   process.exit(1);
 }
 
@@ -204,7 +244,79 @@ const tools = [
       },
     },
   },
-    {
+          {
+    type: "function",
+    function: {
+      name: "audit_code_changes",
+      description: "Ejecuta una auditoría estricta sobre las modificaciones pendientes (git diff) evaluando rendimiento móvil, fugas de memoria y buenas prácticas antes de commitear.",
+      parameters: {
+        type: "object",
+        properties: {
+          focus_area: { type: "string", enum: ["performance", "memory_leaks", "clean_code", "all"], description: "Área de enfoque principal para la revisión" }
+        }
+      }
+    }
+  },
+{
+    type: "function",
+    function: {
+      name: "symbol_navigator",
+      description: "Localiza al instante definiciones, funciones, clases, componentes o interfaces mediante ripgrep sin gastar tokens innecesarios.",
+      parameters: {
+        type: "object",
+        properties: {
+          symbol_name: { type: "string", description: "Nombre de la función, clase, interfaz o componente a rastrear" }
+        },
+        required: ["symbol_name"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "system_telemetry",
+      description: "Inspecciona el uso de memoria RAM, puertos de red ocupados (puerto 3000) o termina procesos colgados.",
+      parameters: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["ports", "memory", "kill_port"], description: "Acción a diagnosticar" },
+          port: { type: "number", description: "Número de puerto a consultar o liberar (por defecto 3000)" }
+        },
+        required: ["action"]
+      }
+    }
+  },
+{
+    type: "function",
+    function: {
+      name: "git_ops",
+      description: "Ejecuta operaciones seguras de Git: status, diff, o commit de cambios verificados.",
+      parameters: {
+        type: "object",
+        properties: {
+          action: { type: "string", enum: ["status", "diff", "commit"], description: "Acción de git a realizar" },
+          message: { type: "string", description: "Mensaje de commit (requerido si action es commit)" }
+        },
+        required: ["action"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "find_in_code",
+      description: "Busca patrones de texto o nombres de funciones en los archivos de código del proyecto.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "Texto o expresión regular a buscar" },
+          extension: { type: "string", description: "Filtro de extensión opcional, ej: ts, tsx, js, rs" }
+        },
+        required: ["query"]
+      }
+    }
+  },
+{
     type: "function",
     function: {
       name: "patch_file",
@@ -264,7 +376,7 @@ async function runQuickIntegrityCheck(filePath) {
     return "";
   }
   try {
-    const { stdout, stderr } = await execAsync("node --check " + filePath + " 2>&1 || true", { cwd: process.cwd() });
+    const { stdout, stderr } = await execAsync("node --check " + filePath + " 2>&1 || true", { cwd: REPO_ROOT });
     const output = (stdout + stderr).trim();
     if (output && output.toLowerCase().includes("syntaxerror")) {
       return "\n[ALERTA DE AUTOCORRECCIÓN]: Se detectó un error sintáctico tras el cambio:\n" + output;
@@ -299,23 +411,101 @@ async function handleToolCall(fnName, args) {
       return await readRecentMemory(args.limit || 5);
     }
     if (fnName === "run_project_tests") {
-      const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
       const clean = (args.test_file || "").replace(/^.*[\\/]/, "");
       const target = clean ? `tests/${clean}` : "tests/*.test.mjs tests/*.test.ts";
       const { stdout, stderr } = await execAsync(
         `node --experimental-strip-types --test ${target} 2>&1`,
-        { cwd: repoRoot, timeout: 120000 },
+        { cwd: REPO_ROOT, timeout: 120000 },
       );
       return (stdout || stderr || "Tests ejecutados.").trim();
     }
     if (fnName === "read_file") {
-      const resolved = path.resolve(process.cwd(), args.file_path);
-      if (!fs.existsSync(resolved)) return `Error: El archivo ${args.file_path} no existe.`;
+      const resolved = resolveRepoPath(args.file_path);
+      if (!fs.existsSync(resolved)) return `Error: El archivo ${args.file_path} no existe en ${REPO_ROOT}.`;
       return fs.readFileSync(resolved, "utf-8");
     }
-        if (fnName === "patch_file") {
-      const resolved = path.resolve(process.cwd(), args.file_path);
-      if (!fs.existsSync(resolved)) return `Error: El archivo ${args.file_path} no existe.`;
+    if (fnName === "audit_code_changes") {
+      const { stdout: diffOutput } = await execAsync("git diff", { cwd: REPO_ROOT });
+      if (!diffOutput.trim()) {
+        return "Auditoría cancelada: El árbol de trabajo está limpio, no hay cambios en git diff para auditar.";
+      }
+      const focus = args.focus_area || "all";
+      const auditPrompt = `Actúa como Auditor Principal de Código Senior para Android/Termux y React/TypeScript.
+Analiza críticamente el siguiente git diff con enfoque en: ${focus}.
+Verifica:
+1. Fugas de memoria (listeners sin cleanup, timers no cancelados).
+2. Impacto en rendimiento móvil (re-renders, operaciones sincrónicas pesadas).
+3. Violaciones de tipos TypeScript o posibles errores en tiempo de ejecución.
+Emite un veredicto conciso: APROBADO o RECHAZADO, detallando puntos a corregir si hay fallos.
+
+DIFF:
+${diffOutput.slice(0, 3500)}`;
+
+      const auditResponse = await fetch(`${DEEPSEEK_BASE_URL}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${API_KEY}`
+        },
+        body: JSON.stringify({
+          model: "deepseek-chat",
+          messages: [{ role: "user", content: auditPrompt }],
+          temperature: 0.2
+        })
+      });
+      const data = await auditResponse.json();
+      return "=== INFORME DE AUDITORÍA DE CÓDIGO ===\n" + (data.choices?.[0]?.message?.content || "No se pudo generar el veredicto.");
+    }
+    if (fnName === "symbol_navigator") {
+      const target = (args.symbol_name || "").replace(/[^a-zA-Z0-9_-]/g, "");
+      if (!target) return "Error: symbol_name vacío o inválido.";
+      const pattern = "(function\\s+" + target + "|const\\s+" + target + "\\s*=|class\\s+" + target + "|interface\\s+" + target + "|export\\s+.*" + target + ")";
+      const cmd = "rg -n --no-heading --color=never -e \"" + pattern + "\" src/ tests/ 2>/dev/null | head -n 20";
+      const { stdout } = await execAsync(cmd, { cwd: REPO_ROOT });
+      return stdout.trim() || "No se encontraron definiciones exactas para: " + target;
+    }
+    if (fnName === "system_telemetry") {
+      const parsedPort = Number.parseInt(args.port, 10);
+      const targetPort = Number.isInteger(parsedPort) && parsedPort > 0 && parsedPort <= 65535 ? parsedPort : 3000;
+      if (args.action === "ports") {
+        const { stdout } = await execAsync("lsof -i :" + targetPort + " 2>/dev/null || echo \"Puerto " + targetPort + " libre.\"", { cwd: REPO_ROOT });
+        return stdout.trim();
+      }
+      if (args.action === "memory") {
+        const { stdout } = await execAsync("free -m 2>/dev/null || cat /proc/meminfo | head -n 4", { cwd: REPO_ROOT });
+        return stdout.trim();
+      }
+      if (args.action === "kill_port") {
+        const { stdout } = await execAsync("fuser -k " + targetPort + "/tcp 2>/dev/null || true", { cwd: REPO_ROOT });
+        return "Orden de liberación ejecutada para puerto " + targetPort + ".";
+      }
+    }
+    if (fnName === "git_ops") {
+      if (args.action === "status") {
+        const { stdout } = await execAsync("git status -s", { cwd: REPO_ROOT });
+        return stdout.trim() || "Árbol de trabajo limpio.";
+      }
+      if (args.action === "diff") {
+        const { stdout } = await execAsync("git diff --stat", { cwd: REPO_ROOT });
+        return stdout.trim() || "No hay diferencias pendientes.";
+      }
+      if (args.action === "commit") {
+        if (!args.message) return "Error: Se requiere un mensaje para el commit.";
+        const cleanMsg = String(args.message).replace(/[`$;]/g, "").replace(/"/g, "");
+        if (!cleanMsg.trim()) return "Error: Mensaje de commit inválido.";
+        const { stdout, stderr } = await execAsync(`git add -A && git commit -m "${cleanMsg}"`, { cwd: REPO_ROOT });
+        return (stdout || stderr || "Commit completado.").trim();
+      }
+    }
+    if (fnName === "find_in_code") {
+      const extFilter = args.extension ? `--include="*.${args.extension}"` : `--include="*.ts" --include="*.tsx" --include="*.js" --include="*.rs"`;
+      const cmd = `grep -rnE ${extFilter} "${args.query.replace(/"/g, "")}" src/ tests/ 2>/dev/null | head -n 25`;
+      const { stdout } = await execAsync(cmd, { cwd: REPO_ROOT });
+      return stdout.trim() || "No se encontraron coincidencias.";
+    }
+    if (fnName === "patch_file") {
+      const resolved = resolveRepoPath(args.file_path);
+      if (!fs.existsSync(resolved)) return `Error: El archivo ${args.file_path} no existe en ${REPO_ROOT}.`;
       const original = fs.readFileSync(resolved, "utf-8");
       if (!original.includes(args.search)) {
         return `Error: No se encontró la cadena exacta de búsqueda en ${args.file_path}. Asegúrate de copiar el bloque idéntico.`;
@@ -329,14 +519,14 @@ async function handleToolCall(fnName, args) {
       const check = await runQuickIntegrityCheck(resolved); return `Archivo ${args.file_path} parcheado con éxito (1 bloque reemplazado).${check}`;
     }
     if (fnName === "write_file") {
-      const resolved = path.resolve(process.cwd(), args.file_path);
+      const resolved = resolveRepoPath(args.file_path);
       fs.mkdirSync(path.dirname(resolved), { recursive: true });
       fs.writeFileSync(resolved, args.content, "utf-8");
       const check = await runQuickIntegrityCheck(resolved); return `Archivo ${args.file_path} guardado correctamente.${check}`;
     }
     if (fnName === "execute_shell") {
       const { stdout, stderr } = await execAsync(args.command, {
-        cwd: process.cwd(),
+        cwd: REPO_ROOT,
         timeout: 30000,
       });
       return (stdout || stderr || "(Comando finalizado sin salida)").trim();
@@ -348,7 +538,7 @@ async function handleToolCall(fnName, args) {
 }
 
 async function chatTurn() {
-  const res = await fetch("https://api.deepseek.com/chat/completions", {
+  const res = await fetch(DEEPSEEK_BASE_URL + "/chat/completions", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
