@@ -12,6 +12,7 @@ import {
   buildToolCatalog,
   parseModelPlan,
   planFromModel,
+  resolveChatEndpoint,
   type LlmProviderConfig,
 } from "../src/lib/agent/model.ts";
 import { TOOL_REGISTRY } from "../src/lib/agent/tools.ts";
@@ -283,6 +284,25 @@ test("parseModelPlan: los ids del modelo se ignoran (se reasignan de cero)", () 
   assert.ok(plan);
   assert.notEqual(plan!.operations[0]!.id, "op_inyectado_1");
   assert.ok(plan!.operations[0]!.id.startsWith("op_"));
+});
+
+test("resolveChatEndpoint: acepta base URL y añade /chat/completions cuando falta", () => {
+  assert.equal(
+    resolveChatEndpoint("https://api.deepseek.com"),
+    "https://api.deepseek.com/chat/completions",
+  );
+  assert.equal(
+    resolveChatEndpoint("https://api.deepseek.com/"),
+    "https://api.deepseek.com/chat/completions",
+  );
+  assert.equal(
+    resolveChatEndpoint("https://api.openai.com/v1"),
+    "https://api.openai.com/v1/chat/completions",
+  );
+  assert.equal(
+    resolveChatEndpoint("https://api.openai.com/v1/chat/completions"),
+    "https://api.openai.com/v1/chat/completions",
+  );
 });
 
 test("planFromModel: rechaza endpoints no-https remotos sin hacer red", async () => {

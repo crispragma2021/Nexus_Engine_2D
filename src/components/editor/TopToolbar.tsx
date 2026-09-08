@@ -19,10 +19,8 @@ import {
   Play,
   Plus,
   Redo2,
-  Save,
   Scissors,
   Smartphone,
-  Sparkles,
   SquareStack,
   Undo2,
   ZoomIn,
@@ -30,7 +28,6 @@ import {
 } from "lucide-react";
 import { useEditor } from "@/lib/editor/store";
 import { S } from "@/lib/editor/i18n";
-import { saveProjectEverywhere } from "@/lib/projects/save";
 import {
   clearClipboard,
   clipboardSummary,
@@ -48,25 +45,12 @@ const ZOOM_BUTTON_FACTOR = 2 ** (2 / 16);
 const Sep = () => <div className="mx-1 h-5 w-px shrink-0 bg-separator" />;
 
 export function TopToolbar() {
-  const { ui, dispatch, project, scene, canUndo, canRedo, dirty } = useEditor();
+  const { ui, dispatch, scene, canUndo, canRedo } = useEditor();
   const [previewMenu, setPreviewMenu] = useState<{ x: number; y: number } | null>(null);
-  const [saving, setSaving] = useState(false);
 
   const isEvents = ui.tab === "events";
   const tab = ui.openedTabs.find((t) => t.id === ui.activeTabId);
   const isProjectTab = !!tab && tab.kind !== "scene";
-
-  const onSave = async () => {
-    setSaving(true);
-    try {
-      await saveProjectEverywhere(project);
-      dispatch({ type: "markSaved" });
-    } catch (error) {
-      window.alert?.(error instanceof Error ? error.message : "No se pudo guardar el proyecto.");
-    } finally {
-      setSaving(false);
-    }
-  };
 
   const onPaste = () => {
     if (!hasClipboard()) return;
@@ -110,21 +94,6 @@ export function TopToolbar() {
   return (
     <div className="flex h-10 shrink-0 items-center gap-0.5 border-b border-separator bg-toolbar px-2 text-[13px]">
       <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto [&::-webkit-scrollbar]:h-0">
-        <button
-          type="button"
-          title={S.save}
-          aria-label={S.save}
-          onClick={() => void onSave()}
-          className={cn(
-            "flex h-8 shrink-0 items-center gap-1.5 rounded px-2 text-[12px] hover:bg-hover-bg",
-            dirty ? "text-[#FFBC57]" : "text-muted-foreground",
-          )}
-        >
-          <Save className={cn("h-4 w-4", saving && "animate-spin")} />
-          <span className="hidden xl:inline">{dirty ? S.save : "Guardado"}</span>
-        </button>
-
-        <Sep />
         <IconButton
           label={`${S.undo} (Ctrl+Z)`}
           disabled={!canUndo}
@@ -307,15 +276,6 @@ export function TopToolbar() {
               <span className="hidden sm:inline">{S.addANewObject}</span>
             </button>
           </>
-        )}
-        {isEvents && (
-          <button
-            type="button"
-            onClick={() => window.alert?.(S.firstEventHelp)}
-            className="flex h-8 shrink-0 items-center gap-1 rounded px-2 text-[12px] text-link hover:bg-hover-bg"
-          >
-            {S.help}
-          </button>
         )}
       </div>
 

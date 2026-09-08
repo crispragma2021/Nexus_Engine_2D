@@ -13,6 +13,9 @@ import { planFromModel, type LlmProviderConfig } from "./model.ts";
  * del plan. Esta capa solo aporta el endpoint y el modelo por defecto de
  * DeepSeek, manteniendo la API pública que usan scripts/agent-cli.mjs.
  */
+/** Base del proveedor DeepSeek, usada como endpoint por defecto en la UI. */
+export const DEEPSEEK_BASE_URL = "https://api.deepseek.com";
+/** Endpoint chat-completions completo (OpenAI-compatible). */
 export const DEEPSEEK_API_URL = "https://api.deepseek.com/chat/completions";
 export const DEFAULT_DEEPSEEK_MODEL = "deepseek-chat";
 /** Timeout generoso por defecto para el planificador remoto de DeepSeek. */

@@ -1,13 +1,5 @@
 import * as React from "react";
-import {
-  Bot,
-  Paperclip,
-  Send,
-  X,
-  FileText,
-  Image as ImageIcon,
-  Music,
-} from "lucide-react";
+import { Bot, Paperclip, Send, X, FileText, Image as ImageIcon, Music } from "lucide-react";
 import { toast } from "sonner";
 import { useEditor } from "@/lib/editor/store";
 import { compileIntentToEvents } from "@/lib/editor/ai-logic";
@@ -16,11 +8,7 @@ import { TOOL_REGISTRY } from "@/lib/agent/tools";
 import type { AgentPlan } from "@/lib/agent/operations";
 import { useAgentCommit } from "./hooks/use-agent-commit";
 import { uid } from "@/lib/editor/ids";
-import {
-  serializeSfxrMetadata,
-  sfxrToDataUrl,
-  SFXR_PRESETS,
-} from "@/lib/audio/sfxr";
+import { serializeSfxrMetadata, sfxrToDataUrl, SFXR_PRESETS } from "@/lib/audio/sfxr";
 import type { GDInstance, GDObjectDef, GDResource } from "@/lib/editor/types";
 import { cn } from "@/lib/utils";
 
@@ -77,14 +65,14 @@ export function QuickAutomationBar() {
       const ext = file.name.split(".").pop()?.toLowerCase() || "";
       let type: "doc" | "image" | "audio" = "doc";
 
-      if (["png", "jpg", "jpeg", "webp", "gif"].includes(ext)) {
+      if (["png", "jpg", "jpeg", "webp"].includes(ext)) {
         type = "image";
       } else if (["mp3", "wav", "ogg"].includes(ext)) {
         type = "audio";
       }
 
       let content = "";
-      if (type === "doc" && (ext === "txt" || ext === "md" || ext === "json")) {
+      if (type === "doc" && (ext === "txt" || ext === "md")) {
         content = await file.text();
       }
 
@@ -224,7 +212,7 @@ export function QuickAutomationBar() {
               <div className="absolute bottom-10 left-0 z-50 flex w-48 flex-col gap-1 rounded-xl border border-separator bg-[#1A1A24] p-1.5 shadow-xl">
                 <button
                   type="button"
-                  onClick={() => handleTriggerFileSelect(".txt,.md,.json,.doc,.docx,.xlsx,.pdf")}
+                  onClick={() => handleTriggerFileSelect(".txt,.md,.docx,.xlsx,.pdf")}
                   className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-text-secondary hover:bg-elevated hover:text-foreground"
                 >
                   <FileText className="h-3.5 w-3.5 text-emerald-400" />
@@ -232,7 +220,7 @@ export function QuickAutomationBar() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleTriggerFileSelect("image/*")}
+                  onClick={() => handleTriggerFileSelect(".png,.jpg,.jpeg,.webp")}
                   className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-text-secondary hover:bg-elevated hover:text-foreground"
                 >
                   <ImageIcon className="h-3.5 w-3.5 text-sky-400" />
@@ -240,7 +228,7 @@ export function QuickAutomationBar() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleTriggerFileSelect("audio/*")}
+                  onClick={() => handleTriggerFileSelect(".mp3,.wav,.ogg")}
                   className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs text-text-secondary hover:bg-elevated hover:text-foreground"
                 >
                   <Music className="h-3.5 w-3.5 text-amber-400" />
