@@ -33,6 +33,16 @@ test("mobile dock panels and contextual AI popovers stop above the fixed dock", 
   assert.match(automation, /data-ai-overlay="drawer"/);
   assert.match(automation, /fixed inset-x-0 bottom-0/);
   assert.match(automation, /md:bottom-4/);
+  // The drawer paints the bottom safe area itself and the dock unmounts while
+  // the assistant is open, so no dock fragment peeks behind it.
+  assert.match(automation, /pb-\[env\(safe-area-inset-bottom\)\]/);
+  assert.match(dock, /const assistantOpen = ui\.quickAutomationOpen/);
+  assert.match(dock, /\{assistantOpen \? null : \(/);
+  assert.match(dock, /open=\{open !== null && !assistantOpen\}/);
+  // The assistant form must not clip its floating attachment popover.
+  assert.match(automation, /overflow-visible rounded-t-2xl/);
+  assert.doesNotMatch(automation, /overflow-y-auto rounded-t-2xl/);
+  assert.match(automation, /absolute bottom-full mb-2 left-0 z-50/);
   // Everything that must coexist with the dock stops right above it.
   assert.match(inlinePrompt, /data-ai-overlay="contextual-popover"/);
   assert.match(inlinePrompt, /bottom-\[calc\(var\(--mobile-editor-dock-height\)/);

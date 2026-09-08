@@ -40,7 +40,8 @@ function readStoredHeight(): number {
 }
 
 export function MobileBottomBar() {
-  const { dispatch } = useEditor();
+  const { ui, dispatch } = useEditor();
+  const assistantOpen = ui.quickAutomationOpen;
   const [open, setOpen] = React.useState<SheetKey | null>(null);
   const [heightVh, setHeightVh] = React.useState<number>(DEFAULT_VH);
   const [dragging, setDragging] = React.useState(false);
@@ -112,41 +113,56 @@ export function MobileBottomBar() {
   const closePanel = React.useCallback(() => setOpen(null), []);
   const title = ITEMS.find((item) => item.key === open)?.label ?? S.properties;
 
+  // El asistente (QuickAutomationBar) es un drawer inferior a pantalla completa:
+  // mientras esté abierto ocultamos el dock permanente y cerramos cualquier panel
+  // para que no asome ningún fragmento detrás del área inferior (safe-area incluida).
+  React.useEffect(() => {
+    if (assistantOpen) setOpen(null);
+  }, [assistantOpen]);
+
   return (
     <>
-      <nav
-        aria-label="Herramientas del editor de escena"
-        data-editor-mobile-dock="permanent"
-        className="fixed inset-x-0 bottom-0 z-40 flex h-[var(--mobile-editor-dock-height)] items-stretch border-t border-separator bg-toolbar pb-[env(safe-area-inset-bottom)] md:hidden"
-      >
-        {ITEMS.map(({ key, label, icon: Icon }) => (
-          <button
-            key={key}
-            type="button"
-            aria-label={label}
-            aria-controls="mobile-editor-drawer"
-            aria-expanded={open === key}
-            aria-pressed={open === key}
-            onClick={() => select(key)}
-            className={cn(
-              "relative flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 text-[8px] font-medium uppercase tracking-tight transition-colors",
-              open === key ? "bg-[#32323B] text-link" : "text-muted-foreground active:bg-elevated",
-            )}
-          >
-            <span
-              aria-hidden
+      {assistantOpen ? null : (
+        <nav
+          aria-label="Herramientas del editor de escena"
+          data-editor-mobile-dock="permanent"
+          className="fixed inset-x-0 bottom-0 z-40 flex h-[var(--mobile-editor-dock-height)] items-stretch border-t border-separator bg-toolbar pb-[env(safe-area-inset-bottom)] md:hidden"
+        >
+          {ITEMS.map(({ key, label, icon: Icon }) => (
+            <button
+              key={key}
+              type="button"
+              aria-label={label}
+              aria-controls="mobile-editor-drawer"
+              aria-expanded={open === key}
+              aria-pressed={open === key}
+              onClick={() => select(key)}
               className={cn(
-                "absolute inset-x-2 top-0 h-0.5 rounded-full bg-transparent",
-                open === key && "bg-[#8AD6FF]",
+                "relative flex min-w-0 flex-1 flex-col items-center justify-center gap-0.5 px-0.5 text-[8px] font-medium uppercase tracking-tight transition-colors",
+                open === key
+                  ? "bg-[#32323B] text-link"
+                  : "text-muted-foreground active:bg-elevated",
               )}
-            />
-            <Icon className="h-5 w-5 shrink-0" />
-            <span className="w-full truncate">{label}</span>
-          </button>
-        ))}
-      </nav>
+            >
+              <span
+                aria-hidden
+                className={cn(
+                  "absolute inset-x-2 top-0 h-0.5 rounded-full bg-transparent",
+                  open === key && "bg-[#8AD6FF]",
+                )}
+              />
+              <Icon className="h-5 w-5 shrink-0" />
+              <span className="w-full truncate">{label}</span>
+            </button>
+          ))}
+        </nav>
+      )}
 
-      <Sheet open={open !== null} modal={false} onOpenChange={(value) => !value && closePanel()}>
+      <Sheet
+        open={open !== null && !assistantOpen}
+        modal={false}
+        onOpenChange={(value) => !value && closePanel()}
+      >
         <SheetContent
           id="mobile-editor-drawer"
           side="bottom"

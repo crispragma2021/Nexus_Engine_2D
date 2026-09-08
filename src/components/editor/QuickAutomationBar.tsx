@@ -147,11 +147,11 @@ export function QuickAutomationBar() {
       aria-modal="false"
       aria-label="Asistente de automatización"
       data-ai-overlay="drawer"
-      className="fixed inset-x-0 bottom-0 z-[60] w-full md:inset-x-auto md:bottom-4 md:left-1/2 md:w-[min(720px,calc(100vw-1rem))] md:-translate-x-1/2"
+      className="fixed inset-x-0 bottom-0 z-[60] w-full bg-[#14141B] pb-[env(safe-area-inset-bottom)] md:inset-x-auto md:bottom-4 md:left-1/2 md:w-[min(720px,calc(100vw-1rem))] md:-translate-x-1/2 md:bg-transparent md:pb-0"
     >
       <form
         onSubmit={submit}
-        className="max-h-[calc(100dvh-1rem)] overflow-y-auto rounded-t-2xl border border-[#3A3A48] bg-[#14141B]/95 p-3 shadow-2xl backdrop-blur-xl md:rounded-2xl"
+        className="max-h-[calc(100dvh-1rem)] overflow-visible rounded-t-2xl border border-[#3A3A48] bg-[#14141B]/95 p-3 shadow-2xl backdrop-blur-xl md:rounded-2xl"
       >
         <div className="mb-2 flex items-center justify-between border-b border-[#2A2A38] pb-2">
           <div className="flex items-center gap-2">
@@ -170,9 +170,9 @@ export function QuickAutomationBar() {
           </button>
         </div>
 
-        {/* Chips de archivos adjuntos */}
+        {/* Chips de archivos adjuntos (única zona con scroll propio) */}
         {attachments.length > 0 && (
-          <div className="mb-2 flex flex-wrap gap-1.5">
+          <div className="mb-2 flex max-h-[22vh] flex-wrap gap-1.5 overflow-y-auto overscroll-contain pr-0.5">
             {attachments.map((att, idx) => (
               <span
                 key={idx}
@@ -209,7 +209,7 @@ export function QuickAutomationBar() {
 
             {/* Menú emergente de tipos de archivo */}
             {showAttachMenu && (
-              <div className="absolute bottom-10 left-0 z-50 flex w-48 flex-col gap-1 rounded-xl border border-separator bg-[#1A1A24] p-1.5 shadow-xl">
+              <div className="absolute bottom-full mb-2 left-0 z-50 flex w-48 flex-col gap-1 rounded-xl border border-separator bg-[#1A1A24] p-1.5 shadow-xl">
                 <button
                   type="button"
                   onClick={() => handleTriggerFileSelect(".txt,.md,.docx,.xlsx,.pdf")}
