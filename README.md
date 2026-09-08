@@ -11,6 +11,7 @@ La versión `v0.1.0` ofrece una primera experiencia funcional del editor visual 
 - Editor de escenas y eventos inspirado en flujos de creación visual.
 - Objetos, instancias, capas, grupos, comportamientos, variables y recursos.
 - Automatización híbrida opcional: eventos visuales, sprites, máscaras y SFX generados siguen siendo editables con las herramientas manuales.
+- Asistente **Nexus AI**: instrucción en lenguaje natural → plan de operaciones revisable, servido por el gateway [`/api/agent`](AGENT_ARCHITECTURE.md) sobre Gemini y con respaldo local determinista si no hay clave configurada.
 - Importación tradicional de imágenes PNG/JPG/SVG y audio WAV/MP3/OGG.
 - Runtime propio en TypeScript para previsualizar proyectos 2D.
 - Guardado local en el dispositivo.
@@ -46,6 +47,8 @@ El manifest PWA vive en [`public/manifest.webmanifest`](public/manifest.webmanif
 ## Variables de entorno
 
 Copia `.env.example` a `.env` y completa únicamente los valores de tu entorno. `.env` está excluido de Git y nunca debe incluirse en un commit.
+
+`GEMINI_API_KEY` es **solo del servidor** (gateway `/api/agent` del asistente Nexus AI): no uses variantes `VITE_*` para ella, porque se inyectarían en el bundle del cliente. En Vercel se configura como variable de entorno del proyecto. Sin esa clave el asistente responde `503` y el editor continúa con el planificador local.
 
 ## Licencia
 
