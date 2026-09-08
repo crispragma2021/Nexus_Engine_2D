@@ -274,19 +274,34 @@ export function parseModelPlan(raw: unknown, project: GDProject): LlmPlanResult 
  * ---------------------------------------------------------------------- */
 
 /**
+ * Los endpoints del propio gateway (`/api/agent`) son rutas relativas del mismo
+ * origen: no tienen host, así que la credencial no puede fugarse a un tercero y
+ * el navegador las resuelve contra el origen de la app (HTTPS en producción,
+ * localhost en desarrollo).
+ */
+export function isSameOriginEndpoint(raw: string): boolean {
+  const trimmed = raw.trim();
+  return trimmed.startsWith("/") && !trimmed.startsWith("//");
+}
+
+/**
  * Resuelve un endpoint OpenAI-compatible a la URL de chat-completions.
  * Acepta tanto una URL completa (`…/chat/completions`) como una URL base
  * (p. ej. `https://api.deepseek.com` o `https://api.openai.com/v1`) y añade
- * la ruta estándar `/chat/completions` cuando falta.
+ * la ruta estándar `/chat/completions` cuando falta. Las rutas del mismo origen
+ * (`/api/agent`) ya son endpoints completos y se devuelven tal cual.
  */
 export function resolveChatEndpoint(raw: string): string {
   const trimmed = raw.trim();
+  if (isSameOriginEndpoint(trimmed)) return trimmed.replace(/\/+$/, "") || "/";
   const base = trimmed.replace(/\/+$/, "");
   if (/\/completions$/i.test(base)) return trimmed;
   return `${base}/chat/completions`;
 }
 
 function safeEndpoint(url: string): { url?: string; reason?: string } {
+  // Gateway propio en el mismo origen: sin host que validar ni al que filtrar.
+  if (isSameOriginEndpoint(url)) return { url };
   let parsed: URL;
   try {
     parsed = new URL(url);

@@ -1,9 +1,25 @@
 import * as React from "react";
-import { Bot, Paperclip, Send, X, FileText, Image as ImageIcon, Music } from "lucide-react";
+import {
+  Bot,
+  Cpu,
+  Loader2,
+  Paperclip,
+  Send,
+  Sparkles,
+  X,
+  FileText,
+  Image as ImageIcon,
+  Music,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useEditor } from "@/lib/editor/store";
 import { compileIntentToEvents } from "@/lib/editor/ai-logic";
 import { eventsToAgentPlan } from "@/lib/agent/planner";
+import {
+  planWithAssistant,
+  probeNexusAssistant,
+  type AssistantSource,
+} from "@/lib/agent/nexus-client";
 import { TOOL_REGISTRY } from "@/lib/agent/tools";
 import type { AgentPlan } from "@/lib/agent/operations";
 import { useAgentCommit } from "./hooks/use-agent-commit";
@@ -27,12 +43,66 @@ export function QuickAutomationBar() {
   const [pendingPlan, setPendingPlan] = React.useState<AgentPlan | null>(null);
   const [attachments, setAttachments] = React.useState<AttachedFile[]>([]);
   const [showAttachMenu, setShowAttachMenu] = React.useState(false);
+  /** Origen del plan en aprobación: el gateway Nexus AI o el respaldo local. */
+  const [source, setSource] = React.useState<AssistantSource | null>(null);
+  /** `false` solo cuando el servidor confirmó que no tiene GEMINI_API_KEY. */
+  const [assistantEnabled, setAssistantEnabled] = React.useState<boolean | null>(null);
 
   const inputRef = React.useRef<HTMLInputElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const [fileFilter, setFileFilter] = React.useState<string>("*/*");
 
   const open = ui.quickAutomationOpen;
+
+  // Sondeo único de disponibilidad del gateway (`GET /api/agent`): si el
+  // servidor no tiene clave, la instrucción va directa al planificador local y
+  // se evita un viaje fallido por cada envío. Un fallo de red no cambia nada.
+  React.useEffect(() => {
+    if (!open || assistantEnabled !== null) return;
+    let active = true;
+    void probeNexusAssistant().then((status) => {
+      if (active && status.known) setAssistantEnabled(status.enabled);
+    });
+    return () => {
+      active = false;
+    };
+  }, [open, assistantEnabled]);
+
+  /** Respaldo determinista sin red: el compilador de eventos de siempre. */
+  const planLocally = React.useCallback(
+    (instruction: string): AgentPlan | null => {
+      const objectNames = (scene.objects || []).map((object) => object.name);
+      const generated = compileIntentToEvents(instruction, { objectNames });
+      return generated.length === 0 ? null : eventsToAgentPlan(generated, scene.name);
+    },
+    [scene],
+  );
+
+  /** Ejecuta el plan aprobado por la sesión (validación + transacción atómica). */
+  const applyPlan = React.useCallback(
+    (plan: AgentPlan) => {
+      const result = commit(plan);
+      if (result.ok) {
+        toast.success(result.lines[0] ?? "Plan aplicado");
+        setPrompt("");
+        setAttachments([]);
+        setPendingPlan(null);
+        setSource(null);
+        return;
+      }
+      toast.error(result.error ?? "El plan no se pudo aplicar.");
+    },
+    [commit],
+  );
+
+  /** Descarta el plan en aprobación y lo registra en la auditoría de la sesión. */
+  const cancelPending = React.useCallback(() => {
+    if (pendingPlan) {
+      audit("cancelled", `Plan descartado: ${pendingPlan.summary}`, pendingPlan.id);
+    }
+    setPendingPlan(null);
+    setSource(null);
+  }, [audit, pendingPlan]);
 
   const close = React.useCallback(() => {
     setPrompt("");
@@ -46,6 +116,7 @@ export function QuickAutomationBar() {
       );
     }
     setPendingPlan(null);
+    setSource(null);
     dispatch({ type: "ui", patch: { quickAutomationOpen: false } });
   }, [audit, dispatch, pendingPlan]);
 
@@ -104,23 +175,37 @@ export function QuickAutomationBar() {
         combinedPrompt = `${docTexts}\n\nInstrucción: ${cleanPrompt}`;
       }
 
-      const objectNames = (scene.objects || []).map((o) => o.name);
-      const generated = compileIntentToEvents(combinedPrompt, { objectNames });
-      if (generated.length === 0) {
-        toast.info("Describe los cambios para la escena, personajes o narrativa.");
-        setBusy(false);
+      // Flujo de AGENT_ARCHITECTURE.md §2: instrucción → POST /api/agent (Gemini
+      // vía gateway servidor) → validación del plan candidato → aprobación →
+      // commit. Si el gateway no está configurado o falla, entra el planificador
+      // local determinista y el asistente sigue siendo útil sin red.
+      const outcome = await planWithAssistant({
+        instruction: combinedPrompt,
+        project,
+        activeSceneName: scene.name,
+        localPlanner: planLocally,
+        useRemote: assistantEnabled !== false,
+      });
+
+      if (!outcome.plan) {
+        toast.info(
+          outcome.reason ?? "Describe los cambios para la escena, personajes o narrativa.",
+        );
         return;
       }
 
-      const plan = eventsToAgentPlan(generated, scene.name);
-      if (needsApproval(plan)) {
-        setPendingPlan(plan);
-      } else {
-        commit(plan);
-        setPrompt("");
-        setAttachments([]);
+      setSource(outcome.source);
+      if (outcome.source === "local" && assistantEnabled !== false) {
+        toast.info("Nexus AI no pudo generar el plan: se usó el planificador local.");
       }
-    } catch (err) {
+
+      // La sesión decide si hace falta aprobación (Supervised siempre aprueba).
+      if (needsApproval(outcome.plan)) {
+        setPendingPlan(outcome.plan);
+        return;
+      }
+      applyPlan(outcome.plan);
+    } catch {
       toast.error("Error al procesar la instrucción del asistente.");
     } finally {
       setBusy(false);
@@ -194,6 +279,61 @@ export function QuickAutomationBar() {
           </div>
         )}
 
+        {/* Plan candidato en espera de aprobación (Supervised es el modo por defecto) */}
+        {pendingPlan ? (
+          <div className="mb-2 rounded-xl border border-[#6868E8]/60 bg-[#17171F] p-2">
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <span className="flex items-center gap-1 text-[10.5px] font-medium text-[#CFC8FF]">
+                {source === "nexus-ai" ? (
+                  <Sparkles className="h-3 w-3" />
+                ) : (
+                  <Cpu className="h-3 w-3" />
+                )}
+                {source === "nexus-ai" ? "Nexus AI · /api/agent" : "Planificador local"}
+              </span>
+              <span className="text-[10.5px] text-text-placeholder">
+                {pendingPlan.operations.length}{" "}
+                {pendingPlan.operations.length === 1 ? "operación" : "operaciones"}
+              </span>
+            </div>
+            <p className="mb-1 text-[11px] font-medium text-foreground">{pendingPlan.summary}</p>
+            <ul className="mb-1.5 max-h-[18vh] space-y-0.5 overflow-y-auto overscroll-contain">
+              {pendingPlan.operations.slice(0, 12).map((operation, index) => (
+                <li
+                  key={`${operation.type}-${index}`}
+                  className="text-[10.5px] text-text-secondary"
+                >
+                  • {TOOL_REGISTRY[operation.type]?.label ?? operation.type}
+                </li>
+              ))}
+            </ul>
+            <div className="flex gap-1.5">
+              <button
+                type="button"
+                onClick={() => applyPlan(pendingPlan)}
+                className="rounded bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground hover:bg-[#5C36D6]"
+              >
+                Aplicar
+              </button>
+              <button
+                type="button"
+                onClick={cancelPending}
+                className="rounded border border-separator px-2.5 py-1 text-[11px] text-foreground hover:bg-elevated"
+              >
+                Descartar
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {/* El gateway sin configurar se avisa una sola vez, sin bloquear nada */}
+        {assistantEnabled === false ? (
+          <p className="mb-1.5 text-[10px] text-text-placeholder">
+            Nexus AI no está configurado en el servidor (GEMINI_API_KEY): se usará el planificador
+            local.
+          </p>
+        ) : null}
+
         {/* Input con estética limpia estilo Gemini */}
         <div className="relative flex items-center gap-1.5 rounded-xl border border-[#3E3E52] bg-[#1B1B24] px-2 py-1.5 focus-within:border-[#7A68EE]">
           {/* Botón de adjuntar */}
@@ -257,12 +397,17 @@ export function QuickAutomationBar() {
           <button
             type="submit"
             disabled={busy || (!prompt.trim() && attachments.length === 0)}
+            aria-label={busy ? "Consultando a Nexus AI" : "Enviar instrucción al asistente"}
             className={cn(
               "grid h-8 w-8 place-items-center rounded-lg bg-[#6868E8] text-white transition-opacity active:scale-95",
               (busy || (!prompt.trim() && attachments.length === 0)) && "opacity-40",
             )}
           >
-            <Send className="h-3.5 w-3.5" />
+            {busy ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <Send className="h-3.5 w-3.5" />
+            )}
           </button>
         </div>
       </form>

@@ -19,8 +19,25 @@ const MIME = {
   ".woff2": "font/woff2"
 };
 
+// Gateway del asistente Nexus AI (/api/agent): la misma lógica pura que usan la
+// función serverless de Vercel (api/agent.ts) y el middleware de Vite. La clave
+// GEMINI_API_KEY se lee solo aquí, en el servidor. Si este Node no puede cargar
+// TypeScript (Node < 22.18 sin --experimental-strip-types) el servidor sigue
+// sirviendo el editor y el asistente usa el planificador local determinista.
+let handleGatewayNodeRequest = null;
+try {
+  ({ handleGatewayNodeRequest } = await import("../src/lib/agent/gateway-node.ts"));
+} catch (err) {
+  console.warn("Gateway /api/agent no disponible en este Node:", err?.message ?? err);
+}
+
 const server = http.createServer(async (req, res) => {
   try {
+    // 0. Gateway del asistente Nexus AI (antes de assets estáticos y del SSR)
+    if (handleGatewayNodeRequest && (await handleGatewayNodeRequest(req, res))) {
+      return;
+    }
+
     const urlObj = new URL(req.url, `http://${req.headers.host || "localhost:3000"}`);
     const assetPath = path.join(CLIENT_DIR, urlObj.pathname);
 
