@@ -72,6 +72,7 @@ export interface RTObject {
   >;
   tint: [number, number, number] | null;
   colorOverlay: [number, number, number, number] | null;
+  effects?: { type: string; name?: string; parameters: Record<string, string> }[];
   variables: Record<string, string>;
   destroyed: boolean;
 }

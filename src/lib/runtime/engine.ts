@@ -257,6 +257,7 @@ export class GameRuntime {
       object.asset = frame.image;
     }
 
+    object.effects = patch.effects ? [...patch.effects] : [];
     for (const effect of patch.effects ?? []) {
       if (effect.parameters["disabled"] === "yes") continue;
       if (effect.type === "Tint") {

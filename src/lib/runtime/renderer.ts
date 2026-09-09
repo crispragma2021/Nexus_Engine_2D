@@ -85,6 +85,37 @@ export function renderScene(
     if (object.flipX) ctx.scale(-1, 1);
     if (object.flipY) ctx.scale(1, -1);
 
+    if (object.effects && object.effects.length > 0) {
+      const filters = [];
+      for (const eff of object.effects) {
+        if (eff.parameters?.["disabled"] === "yes") continue;
+        const p = eff.parameters || {};
+        switch (eff.type) {
+          case "Blur":
+            if (p["blur"]) filters.push(`blur(${p["blur"]}px)`);
+            break;
+          case "Brightness":
+            if (p["brightness"]) filters.push(`brightness(${1 + parseFloat(p["brightness"])})`);
+            break;
+          case "Sepia":
+            if (p["amount"]) filters.push(`sepia(${p["amount"]})`);
+            break;
+          case "BlackAndWhite":
+            filters.push("grayscale(100%)");
+            break;
+          case "DropShadow":
+            ctx.shadowColor = p["color"] || "#000000";
+            ctx.shadowBlur = parseFloat(p["blur"] || "0");
+            ctx.shadowOffsetX = parseFloat(p["distance"] || "0");
+            ctx.shadowOffsetY = parseFloat(p["distance"] || "0");
+            break;
+        }
+      }
+      if (filters.length > 0) {
+        ctx.filter = filters.join(" ");
+      }
+    }
+
     if (isTextType(object.type)) {
       ctx.fillStyle = object.textColor;
       ctx.font = `${object.bold ? "700 " : ""}${Math.max(1, object.textSize * zoom)}px ${object.fontFamily ? `"${object.fontFamily.replace(/\.[a-z]+$/i, "")}", ` : ""}ui-sans-serif, system-ui, sans-serif`;

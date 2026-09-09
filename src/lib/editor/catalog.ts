@@ -417,7 +417,7 @@ export const EFFECTS: EffectEntry[] = [
       { key: "blur", label: "Intensidad del desenfoque", value: "8" },
       { key: "quality", label: "Número de pasadas", value: "1" },
     ],
-    supported: false,
+    supported: true,
   },
   {
     typeId: "DropShadow",
@@ -429,7 +429,7 @@ export const EFFECTS: EffectEntry[] = [
       { key: "alpha", label: "Opacidad", value: "0.5" },
       { key: "color", label: "Color de la sombra", value: "#000000" },
     ],
-    supported: false,
+    supported: true,
   },
   {
     typeId: "Outline",
@@ -465,21 +465,21 @@ export const EFFECTS: EffectEntry[] = [
     name: "Brillo",
     description: "Ajusta el brillo de la imagen.",
     parameters: [{ key: "brightness", label: "Brillo", value: "0" }],
-    supported: false,
+    supported: true,
   },
   {
     typeId: "Sepia",
     name: "Sepia",
     description: "Tono sepia sobre el objeto.",
     parameters: [{ key: "amount", label: "Cantidad", value: "1" }],
-    supported: false,
+    supported: true,
   },
   {
     typeId: "BlackAndWhite",
     name: "Blanco y negro",
     description: "Elimina el color del objeto.",
     parameters: [],
-    supported: false,
+    supported: true,
   },
   {
     typeId: "Night",
