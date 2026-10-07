@@ -10,6 +10,7 @@ import {
   ClipboardPaste,
   Clock,
   Copy,
+  Download,
   Eraser,
   Globe,
   Grid3x3,
@@ -44,8 +45,13 @@ const ZOOM_BUTTON_FACTOR = 2 ** (2 / 16);
 
 const Sep = () => <div className="mx-1 h-5 w-px shrink-0 bg-separator" />;
 
+import { ExportGameModal } from "./ExportGameModal";
+import { CoreConnectorPanel } from "./CoreConnectorPanel";
+
 export function TopToolbar() {
-  const { ui, dispatch, scene, canUndo, canRedo } = useEditor();
+  const { project, scene, ui, dispatch, canUndo, canRedo } = useEditor();
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [showCorePanel, setShowCorePanel] = useState(false);
   const [previewMenu, setPreviewMenu] = useState<{ x: number; y: number } | null>(null);
 
   const isEvents = ui.tab === "events";
@@ -175,6 +181,35 @@ export function TopToolbar() {
           <>
             <div className="hidden md:contents">
               <Sep />
+              <div className="flex items-center rounded-md bg-[#25252E] p-0.5 border border-separator">
+                <button
+                  type="button"
+                  className={cn(
+                    "flex h-6 items-center px-3 text-[11px] font-bold rounded transition-colors",
+                    !ui.is3DMode
+                      ? "bg-[#478CBF] text-white shadow-sm"
+                      : "text-text-secondary hover:text-foreground"
+                  )}
+                  onClick={() => dispatch({ type: "ui", patch: { is3DMode: false } })}
+                  title="Activar Modo 2D"
+                >
+                  2D
+                </button>
+                <button
+                  type="button"
+                  className={cn(
+                    "flex h-6 items-center px-3 text-[11px] font-bold rounded transition-colors",
+                    ui.is3DMode
+                      ? "bg-[#478CBF] text-white shadow-sm"
+                      : "text-text-secondary hover:text-foreground"
+                  )}
+                  onClick={() => dispatch({ type: "ui", patch: { is3DMode: true } })}
+                  title="Activar Modo 3D"
+                >
+                  3D
+                </button>
+              </div>
+              <Sep />
               <IconButton
                 label={ui.showLeftPanel ? "Ocultar panel de objetos" : "Mostrar panel de objetos"}
                 active={ui.showLeftPanel}
@@ -293,6 +328,28 @@ export function TopToolbar() {
           <Globe className="h-4 w-4" />
           <span className="hidden sm:inline">{S.share}</span>
         </button>
+
+        <button
+          type="button"
+          aria-label="Exportar Juego"
+          title="Exportar juego completo en 1-clic"
+          onClick={() => setShowExportModal(true)}
+          className="flex h-8 shrink-0 items-center gap-1.5 rounded bg-gradient-to-r from-[#8A2BE2] to-[#478CBF] px-2 text-[12px] font-semibold text-white hover:opacity-90 sm:px-3"
+        >
+          <Download className="h-4 w-4" />
+          <span className="hidden sm:inline">Exportar Juego</span>
+        </button>
+
+        <button
+          type="button"
+          aria-label="NEXUS Core"
+          title="NEXUS Core Integration"
+          onClick={() => setShowCorePanel(true)}
+          className="flex h-8 shrink-0 items-center gap-1.5 rounded bg-[#3c3c46] hover:bg-[#464650] border border-zinc-700 px-2 text-[12px] font-semibold text-zinc-300 sm:px-3"
+        >
+          <Bot className="h-4 w-4 text-emerald-400" />
+          <span className="hidden sm:inline">Core</span>
+        </button>
         <IconButton
           label="Vista previa en dispositivo"
           className="hidden sm:flex"
@@ -332,6 +389,8 @@ export function TopToolbar() {
           onClose={() => setPreviewMenu(null)}
         />
       ) : null}
+      <ExportGameModal open={showExportModal} onClose={() => setShowExportModal(false)} />
+      {showCorePanel && <CoreConnectorPanel onClose={() => setShowCorePanel(false)} />}
     </div>
   );
 }

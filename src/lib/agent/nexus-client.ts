@@ -59,8 +59,26 @@ export interface NexusPlanOptions {
  * credencial se queda en el servidor.
  */
 export async function requestNexusPlan(options: NexusPlanOptions): Promise<LlmPlanResult> {
+  let enrichedInstruction = options.instruction;
+
+  try {
+    const resolveRes = await fetch("http://127.0.0.1:43210/api/messages/resolve", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: options.instruction }),
+    });
+    if (resolveRes.ok) {
+      const data = await resolveRes.json();
+      if (data.context) {
+        enrichedInstruction = `[Contexto RAG inyectado por NEXUS Core]:\n${data.context}\n\n[Instrucción del usuario]:\n${options.instruction}`;
+      }
+    }
+  } catch (e) {
+    console.warn("No se pudo conectar con NEXUS Core para resolver el mensaje", e);
+  }
+
   return planFromModel({
-    instruction: options.instruction,
+    instruction: enrichedInstruction,
     project: options.project,
     activeSceneName: options.activeSceneName,
     provider: {

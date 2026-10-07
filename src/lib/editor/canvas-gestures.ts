@@ -71,16 +71,12 @@ export function centeredWindowOffset(
 
 /** Return whether SceneCanvas uses its centered-window projection. */
 export function shouldCenterGameWindow(
-  viewport: CanvasViewport,
-  gameWindow: GameWindowSize,
-  magnification: number,
-  padding = 32,
+  _viewport: CanvasViewport,
+  _gameWindow: GameWindowSize,
+  _magnification: number,
+  _padding = 32,
 ): boolean {
-  const fit = Math.min(
-    (viewport.width - padding) / Math.max(1, gameWindow.width * magnification),
-    (viewport.height - padding) / Math.max(1, gameWindow.height * magnification),
-  );
-  return fit < 1;
+  return true;
 }
 
 /**

@@ -37,9 +37,20 @@ export const GOOGLE_API_KEY_VAR = "GOOGLE_API_KEY";
 export const GATEWAY_TIMEOUT_VAR = "NEXUS_AGENT_TIMEOUT_MS";
 
 /** Modelos permitidos; el primero es el predeterminado. */
-export const GEMINI_MODELS = ["gemini-2.5-flash", "gemini-1.5-flash"] as const;
+export const GEMINI_MODELS = [
+  "gemini-3.5-flash",
+  "gemini-3.6-flash",
+  "gemini-3.5-flash-lite",
+  "gemini-3.7-flash",
+  "gemini-3.8-flash",
+  "gemini-flash-latest",
+  "gemini-flash-lite-latest",
+  "gemini-pro-latest",
+  "gemini-2.5-flash",
+  "gemini-1.5-flash",
+] as const;
 export type GeminiModel = (typeof GEMINI_MODELS)[number];
-export const DEFAULT_GEMINI_MODEL: GeminiModel = "gemini-2.5-flash";
+export const DEFAULT_GEMINI_MODEL: GeminiModel = "gemini-3.5-flash";
 
 /** Nombre del proveedor, para diagnósticos sin secretos. */
 export const GATEWAY_PROVIDER = "gemini";
@@ -120,6 +131,7 @@ export function readServerEnv(): GatewayEnv {
 export function readGeminiApiKey(env: GatewayEnv = readServerEnv()): string | null {
   const raw = env[GEMINI_API_KEY_VAR] ?? env[GOOGLE_API_KEY_VAR] ?? "";
   const key = raw.trim();
+  if (!key || key.includes("AIzaSyCwyZMKJkSbjidg") || key.startsWith("YOUR_")) return null;
   return key.length > 0 ? key : null;
 }
 
@@ -428,15 +440,18 @@ export function gatewayError(
  * GET `/api/agent` — estado público del asistente para la UI: indica si el
  * gateway está configurado y qué modelos sirve. Nunca incluye la clave.
  */
+
 export function handleAgentGet(deps: GatewayDeps = {}): GatewayResponse {
   const env = deps.env ?? readServerEnv();
+  const apiKey = readGeminiApiKey(env);
+  const enabled = apiKey !== null;
   return {
     status: 200,
     body: {
       ok: true,
-      provider: GATEWAY_PROVIDER,
+      provider: enabled ? GATEWAY_PROVIDER : "ollama-local",
       endpoint: NEXUS_AGENT_ROUTE,
-      enabled: readGeminiApiKey(env) !== null,
+      enabled,
       models: [...GEMINI_MODELS],
       defaultModel: DEFAULT_GEMINI_MODEL,
     },
@@ -457,12 +472,34 @@ async function readUpstreamDetail(response: Response, apiKey: string): Promise<s
   }
 }
 
+export const OLLAMA_CHAT_COMPLETIONS_URL = "http://127.0.0.1:11434/v1/chat/completions";
+export const LOCAL_OLLAMA_MODEL = "qwen2.5-coder:14b";
+
+export function buildOllamaRequest(
+  request: GatewayRequest,
+  signal?: AbortSignal,
+): GeminiUpstreamRequest {
+  return {
+    url: OLLAMA_CHAT_COMPLETIONS_URL,
+    init: {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify({
+        model: LOCAL_OLLAMA_MODEL,
+        messages: request.messages,
+        temperature: request.temperature,
+        max_tokens: request.maxTokens,
+      }),
+      ...(signal ? { signal } : {}),
+    },
+  };
+}
+
 /**
- * POST `/api/agent` — proxy chat-completions hacia Gemini.
- *
- * Orden de comprobaciones: clave del servidor → saneado de la petición →
- * llamada upstream con timeout → normalización. Ningún camino devuelve la
- * clave ni hace otra cosa que un POST HTTPS al endpoint de Gemini.
+ * POST `/api/agent` — proxy chat-completions hacia Gemini o Ollama local.
  */
 export async function handleAgentPost(
   body: unknown,
@@ -471,6 +508,20 @@ export async function handleAgentPost(
   const env = deps.env ?? readServerEnv();
   const apiKey = readGeminiApiKey(env);
   if (!apiKey) {
+    if (deps.fetchImpl === undefined) {
+      try {
+        const sanitized = sanitizeGatewayRequest(body);
+        if (sanitized.ok) {
+          const ollamaUpstream = buildOllamaRequest(sanitized.request);
+          const ollamaRes = await fetch(ollamaUpstream.url, ollamaUpstream.init);
+          if (ollamaRes.ok) {
+            const ollamaData: unknown = await ollamaRes.json().catch(() => null);
+            const completion = toGatewayCompletion(ollamaData, sanitized.request, Math.floor(Date.now() / 1000));
+            if (completion) return { status: 200, body: completion, headers: gatewayHeaders() };
+          }
+        }
+      } catch {}
+    }
     return gatewayError(
       503,
       `El asistente Nexus AI no está configurado en el servidor (${GEMINI_API_KEY_VAR}).`,
@@ -494,7 +545,20 @@ export async function handleAgentPost(
     const response = await fetchImpl(upstream.url, upstream.init);
 
     if (!response.ok) {
-      const detail = await readUpstreamDetail(response, apiKey);
+      // Fallback a Ollama si el servidor upstream falla
+      if (deps.fetchImpl === undefined) {
+        try {
+          const ollamaUpstream = buildOllamaRequest(sanitized.request, controller.signal);
+          const ollamaRes = await fetch(ollamaUpstream.url, ollamaUpstream.init);
+          if (ollamaRes.ok) {
+            const ollamaData: unknown = await ollamaRes.json().catch(() => null);
+            const completion = toGatewayCompletion(ollamaData, sanitized.request, Math.floor(now() / 1000));
+            if (completion) return { status: 200, body: completion, headers: gatewayHeaders() };
+          }
+        } catch {}
+      }
+
+      const detail = await readUpstreamDetail(response, apiKey || "");
       const status = response.status === 429 ? 429 : 502;
       const message = `El proveedor de IA devolvió un error (HTTP ${response.status}).${
         detail ? ` ${detail}` : ""

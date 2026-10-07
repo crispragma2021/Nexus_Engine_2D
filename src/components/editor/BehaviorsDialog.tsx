@@ -3,7 +3,8 @@
 // lists every behavior provided by the installed extensions.
 
 import * as React from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Sparkles, Trash2, Wand2 } from "lucide-react";
+import { toast } from "sonner";
 import { useEditor } from "@/lib/editor/store";
 import { BEHAVIORS, behaviorByTypeId } from "@/lib/editor/catalog";
 import { newNameGenerator } from "@/lib/editor/ids";
@@ -12,15 +13,63 @@ import { S } from "@/lib/editor/i18n";
 import { cn } from "@/lib/utils";
 import { GdButton, GdDialog, SearchBar } from "./gd/kit";
 import { BEHAVIOR_ICON, CatalogIcon } from "./gd/icons";
+import { compileIntentToEvents } from "@/lib/editor/ai-logic";
 
 export function BehaviorsDialog() {
   const { scene, dispatch, ui } = useEditor();
   const objectId = ui.dialog?.name === "behaviors" ? ui.dialog.objectId : null;
   const object = objectId ? scene.objects.find((o) => o.id === objectId) : undefined;
   const [picking, setPicking] = React.useState(false);
+  const [showAi, setShowAi] = React.useState(false);
+  const [aiPrompt, setAiPrompt] = React.useState("");
 
   const close = () => dispatch({ type: "closeDialog" });
   if (!object || !objectId) return null;
+
+  const handleGenerateAiBehavior = () => {
+    if (!aiPrompt.trim()) return;
+    const clean = aiPrompt.trim();
+    const rawKey = clean.replace(/[^\p{L}\p{N}]/gu, "").slice(0, 16);
+    const behName = rawKey ? rawKey.charAt(0).toUpperCase() + rawKey.slice(1) : "IaBehavior";
+
+    const isMagnet = /imán|iman|magnet|atraer|moneda/i.test(clean);
+    const isWall = /pared|wall|deslizar/i.test(clean);
+    const isShield = /escudo|shield|fuerza/i.test(clean);
+
+    dispatch({
+      type: "addBehavior",
+      objectId,
+      behavior: {
+        name: newNameGenerator(behName, object.behaviors.map((b) => b.name)),
+        type: isMagnet
+          ? "Tween::TweenBehavior"
+          : isWall
+          ? "PlatformBehavior::PlatformerObjectBehavior"
+          : "Health::Health",
+        properties: isMagnet
+          ? { radioIman: "180", velocidadIman: "350" }
+          : isShield
+          ? { salud: "100", escudo: "50", invulnerabilidad: "3" }
+          : { speed: "200" },
+      },
+    });
+
+    try {
+      const generatedEvents = compileIntentToEvents(clean, {
+        objectNames: scene.objects.map((o) => o.name),
+        sceneNames: [scene.name],
+      });
+      if (generatedEvents.length > 0) {
+        dispatch({ type: "updateScene", patch: { events: [...scene.events, ...generatedEvents] } });
+      }
+    } catch {
+      // Si el intent es puramente estético, se asigna el comportamiento
+    }
+
+    toast.success(`¡Comportamiento '${behName}' generado y asignado a ${object.name}!`);
+    setAiPrompt("");
+    setShowAi(false);
+  };
 
   return (
     <>
@@ -32,6 +81,14 @@ export function BehaviorsDialog() {
         helpPath="https://gdevelop.io/docs/getting-started/assets/behavior"
         footer={
           <>
+            <GdButton
+              variant="raised"
+              className="bg-gradient-to-r from-[#8A2BE2] to-[#478CBF] text-white hover:opacity-90 border-0 font-medium"
+              icon={<Sparkles className="h-4 w-4 text-yellow-300" />}
+              onClick={() => setShowAi(true)}
+            >
+              ✨ Generar comportamiento con IA
+            </GdButton>
             <GdButton
               variant="raised"
               primary
@@ -60,6 +117,42 @@ export function BehaviorsDialog() {
               }
             />
           ))}
+        </div>
+      </GdDialog>
+
+      <GdDialog
+        open={showAi}
+        onClose={() => setShowAi(false)}
+        title="✨ Generar nuevo comportamiento con IA"
+        width="max-w-lg"
+        footer={
+          <>
+            <GdButton variant="raised" onClick={() => setShowAi(false)}>
+              Cancelar
+            </GdButton>
+            <GdButton
+              variant="raised"
+              primary
+              icon={<Wand2 className="h-4 w-4" />}
+              onClick={handleGenerateAiBehavior}
+            >
+              Generar e Instalar
+            </GdButton>
+          </>
+        }
+      >
+        <div className="p-3">
+          <p className="mb-2 text-[12px] text-text-secondary">
+            Describe en lenguaje natural el comportamiento que deseas agregar a{" "}
+            <strong className="text-foreground">{object.name}</strong>:
+          </p>
+          <textarea
+            value={aiPrompt}
+            onChange={(e) => setAiPrompt(e.target.value)}
+            placeholder="Ejemplo: Imán para atraer monedas cercanas, Salto en pared con deslizamiento, Escudo de fuerza recargable tras golpe..."
+            className="h-24 w-full rounded border border-[#3E3E52] bg-[#1B1B24] p-2 text-[12.5px] text-foreground outline-none focus:border-[#7A68EE]"
+            autoFocus
+          />
         </div>
       </GdDialog>
 

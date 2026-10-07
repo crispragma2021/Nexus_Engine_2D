@@ -26,6 +26,7 @@ import {
   type CanvasPoint,
 } from "@/lib/editor/canvas-gestures";
 import { SceneViewToolbar } from "./SceneViewToolbar";
+import { SelectionOverlay } from "./SelectionOverlay";
 
 const HANDLE = 7;
 const WHEEL_ZOOM_FACTOR = 1.7 ** (1 / 16);
@@ -1002,6 +1003,7 @@ export function SceneCanvas() {
           onContextMenu={(event) => open(event, contextMenuEntries(event))}
         />
         <SceneViewToolbar onFit={fitWindow} />
+        <SelectionOverlay />
       </div>
       <StatusBar onFitWindow={fitWindow} />
       {menu}

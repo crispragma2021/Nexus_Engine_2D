@@ -108,14 +108,33 @@ export function PreviewDialog() {
     }
     setShowDebugger(ui.previewWithDebugger);
     const runtime = start();
+    setTimeout(() => {
+      canvasRef.current?.focus();
+    }, 50);
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.repeat) return;
-      event.preventDefault();
+      const isInput =
+        event.target instanceof HTMLInputElement ||
+        event.target instanceof HTMLTextAreaElement;
+      if (isInput) return;
+      if (event.key === "Escape") {
+        close();
+        return;
+      }
+      if (
+        ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", " ", "Space"].includes(
+          event.key,
+        )
+      ) {
+        event.preventDefault();
+      }
       runtime.pressKey(event.key);
     };
     const onKeyUp = (event: KeyboardEvent) => {
-      event.preventDefault();
+      const isInput =
+        event.target instanceof HTMLInputElement ||
+        event.target instanceof HTMLTextAreaElement;
+      if (isInput) return;
       runtime.releaseKey(event.key);
     };
     window.addEventListener("keydown", onKeyDown, { passive: false });
@@ -152,14 +171,26 @@ export function PreviewDialog() {
         canvas.width = wantedWidth;
         canvas.height = wantedHeight;
       }
+      const gameWidth = current.width || project.gameSettings.windowWidth || 800;
+      const gameHeight = current.height || project.gameSettings.windowHeight || 600;
+      const scaleX = wantedWidth / gameWidth;
+      const scaleY = wantedHeight / gameHeight;
+      const scale = Math.min(scaleX, scaleY);
+      const offsetX = (wantedWidth - gameWidth * scale) / 2;
+      const offsetY = (wantedHeight - gameHeight * scale) / 2;
+
       ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "#09090D";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
       renderScene(ctx, state, {
-        width: current.width,
-        height: current.height,
+        width: gameWidth,
+        height: gameHeight,
         background: `rgb(${backgroundColor.split(";").join(",")})`,
         resolve: (name) => resolveAsset(name, project.resources),
-        scale: wantedWidth / (current.width || 1),
+        scale,
+        offsetX,
+        offsetY,
       });
     };
     rafRef.current = requestAnimationFrame(loop);
@@ -273,11 +304,19 @@ export function PreviewDialog() {
         </div>
       </header>
 
-      <div className="relative flex min-h-0 flex-1">
-        <div className="flex min-w-0 flex-1 items-center justify-center p-3">
+      <div className="relative flex min-h-0 flex-1 overflow-hidden bg-[#09090D]">
+        <div className="flex min-w-0 flex-1 items-center justify-center p-2 sm:p-4">
           <div
-            className="relative flex max-h-full w-full max-w-[min(100%,1400px)] items-center justify-center"
-            style={aspect ? { aspectRatio: aspect } : undefined}
+            className="relative flex h-full w-full items-center justify-center overflow-hidden"
+            style={
+              size && size.width
+                ? {
+                    maxWidth: `${size.width}px`,
+                    maxHeight: `${size.height}px`,
+                    aspectRatio: `${size.width} / ${size.height}`,
+                  }
+                : undefined
+            }
           >
             <canvas
               ref={canvasRef}
@@ -291,14 +330,22 @@ export function PreviewDialog() {
                 const rect = event.currentTarget.getBoundingClientRect();
                 const current = runtimeRef.current;
                 if (!current) return;
-                const scaleX = current.width / rect.width;
-                const scaleY = current.height / rect.height;
+                const gameW = current.width || project.gameSettings.windowWidth || 800;
+                const gameH = current.height || project.gameSettings.windowHeight || 600;
+                const dpr = window.devicePixelRatio || 1;
+                const canvasW = rect.width * dpr;
+                const canvasH = rect.height * dpr;
+                const scale = Math.min(canvasW / gameW, canvasH / gameH);
+                const offsetX = (canvasW - gameW * scale) / 2;
+                const offsetY = (canvasH - gameH * scale) / 2;
+                const mouseCanvasX = (event.clientX - rect.left) * dpr;
+                const mouseCanvasY = (event.clientY - rect.top) * dpr;
                 current.movePointer(
-                  (event.clientX - rect.left) * scaleX,
-                  (event.clientY - rect.top) * scaleY,
+                  (mouseCanvasX - offsetX) / scale,
+                  (mouseCanvasY - offsetY) / scale,
                 );
               }}
-              className="max-h-[calc(100vh-190px)] w-full rounded bg-black shadow-[0_0_0_1px_rgba(255,255,255,0.08)] outline-none focus:shadow-[0_0_0_2px_var(--brand)]"
+              className="h-full w-full object-contain rounded outline-none shadow-[0_0_0_1px_rgba(255,255,255,0.08)] focus:shadow-[0_0_0_2px_var(--brand)]"
             />
             <div className="pointer-events-none absolute bottom-1 right-2 text-[10px] tabular-nums text-[#6a6a75]">
               {runtime ? `${runtime.width}×${runtime.height}` : ""} · {tick % 2 === 0 ? "●" : "○"}

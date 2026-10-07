@@ -89,6 +89,46 @@ export interface GDEffect {
   parameters: Record<string, string>;
 }
 
+export type GDMesh3DType =
+  | "box"
+  | "sphere"
+  | "cylinder"
+  | "cone"
+  | "torus"
+  | "plane"
+  | "gltf"
+  | "sprite3d"
+  | "light"
+  | "camera";
+
+export interface GDMaterial3D {
+  color: string;
+  roughness: number;
+  metalness: number;
+  wireframe: boolean;
+  emissive?: string | undefined;
+}
+
+export interface GDPhysics3D {
+  bodyType: "rigid" | "static" | "kinematic" | "none";
+  mass: number;
+  friction: number;
+  restitution: number;
+}
+
+export interface GDLight3D {
+  type: "directional" | "omni" | "spot";
+  color: string;
+  intensity: number;
+  castShadow: boolean;
+}
+
+export interface GDVector3D {
+  x: number;
+  y: number;
+  z: number;
+}
+
 export interface GDObjectDef {
   id: string;
   name: string;
@@ -114,6 +154,12 @@ export interface GDObjectDef {
   isGlobal?: boolean | undefined;
   /** editor-only: hide every instance of this object in the scene view */
   instancesHidden?: boolean | undefined;
+  /** 3D extensions */
+  meshType3D?: GDMesh3DType | undefined;
+  material3D?: GDMaterial3D | undefined;
+  physics3D?: GDPhysics3D | undefined;
+  light3D?: GDLight3D | undefined;
+  gltfUrl3D?: string | undefined;
 }
 
 export interface GDInstance {
@@ -134,6 +180,13 @@ export interface GDInstance {
   /** instance variables overriding the object defaults */
   variables: GDVariable[];
   effects: GDEffect[];
+  /** 3D extensions */
+  position3d?: GDVector3D | undefined;
+  rotation3d?: GDVector3D | undefined;
+  scale3d?: GDVector3D | undefined;
+  /** Hierarchy for 3D Nodes (Godot style) */
+  parentId?: string | undefined;
+  children?: string[] | undefined;
 }
 
 export interface GDLayer {

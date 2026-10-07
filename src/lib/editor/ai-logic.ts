@@ -32,6 +32,11 @@ const SCHEMA: Readonly<Record<string, InstructionSchema>> = {
     required: ["object", "object2"],
     allowed: ["object", "object2", "ignoreTouchingEdges"],
   },
+  Collision3D: {
+    slot: "condition",
+    required: ["object", "object2"],
+    allowed: ["object", "object2"],
+  },
   SourisBouton: { slot: "condition", required: ["button"], allowed: ["button"] },
   SourisSurObjet: {
     slot: "condition",
@@ -80,6 +85,11 @@ const SCHEMA: Readonly<Record<string, InstructionSchema>> = {
     required: ["object", "text"],
     allowed: ["object", "text"],
   },
+  ApplyImpulse3D: {
+    slot: "action",
+    required: ["object", "x", "y", "z"],
+    allowed: ["object", "x", "y", "z"],
+  },
 };
 
 const KEY_ALIASES: Readonly<Record<string, string>> = {
@@ -112,6 +122,66 @@ export function compileIntentToEvents(input: unknown, context: AiLogicContext): 
   }
 
   const normalized = normalize(prompt);
+
+  // Soporte directo para intenciones globales de controles: "coloca los mandos", "controles", "flechas", etc.
+  if (/\b(?:mandos?|controles?|control|flechas)\b/.test(normalized)) {
+    const targetObject = objectAfter(normalized, 0, context.objectNames) ?? context.objectNames[0];
+    if (targetObject) {
+      const moves = [
+        { key: "Left", axis: "ChangeX", val: "-10" },
+        { key: "Right", axis: "ChangeX", val: "10" },
+        { key: "Up", axis: "ChangeY", val: "-10" },
+        { key: "Down", axis: "ChangeY", val: "10" },
+      ];
+      const events: GDEvent[] = moves.map((m) => ({
+        id: nextId("ev_ai"),
+        kind: "standard",
+        conditions: [instruction("KeyPressed", { key: m.key })],
+        actions: [instruction(m.axis, { object: targetObject, op: "add", value: m.val })],
+        subEvents: [],
+        collapsed: false,
+      }));
+      return validateGeneratedEvents(events, context);
+    }
+  }
+
+  // Recolectar / Juntar objetos ("juntar", "recolectar", "agarrar", "monedas", "puntos")
+  if (/\b(?:juntar|recolectar|agarrar|tomar|coleccionar)\b/.test(normalized) && !/\b(?:al|cuando)\b/.test(normalized)) {
+    const objs = mentionedObjects(normalized, context.objectNames);
+    const player = objs[0] ?? context.objectNames.find((n) => /jugador|player|dino/i.test(n)) ?? context.objectNames[0];
+    const item = objs[1] ?? context.objectNames.find((n) => /moneda|coin|puntos|coleccionable/i.test(n)) ?? context.objectNames[1];
+    if (player && item) {
+      const event: GDEvent = {
+        id: nextId("ev_ai"),
+        kind: "standard",
+        conditions: [instruction("Collision", { object: player, object2: item, ignoreTouchingEdges: "no" })],
+        actions: [
+          instruction("Delete", { object: item }),
+          instruction("ModVarScene", { variable: "puntos", op: "add", value: "1" }),
+        ],
+        subEvents: [],
+        collapsed: false,
+      };
+      return validateGeneratedEvents([event], context);
+    }
+  }
+
+  // Saltar / Salto ("salto", "saltar", "brinco")
+  if (/\b(?:salto|saltar|brinco|brincar)\b/.test(normalized)) {
+    const targetObject = objectAfter(normalized, 0, context.objectNames) ?? context.objectNames[0];
+    if (targetObject) {
+      const event: GDEvent = {
+        id: nextId("ev_ai"),
+        kind: "standard",
+        conditions: [instruction("KeyPressed", { key: "Space" })],
+        actions: [instruction("ChangeY", { object: targetObject, op: "add", value: "-50" })],
+        subEvents: [],
+        collapsed: false,
+      };
+      return validateGeneratedEvents([event], context);
+    }
+  }
+
   const conditions = compileConditions(normalized, context);
   const actions = compileActions(prompt, normalized, context);
   const event: GDEvent = {

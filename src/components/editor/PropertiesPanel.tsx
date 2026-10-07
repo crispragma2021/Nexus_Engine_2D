@@ -10,6 +10,7 @@ import {
   Plus,
   RotateCcw,
   Settings2,
+  Sparkles,
   SquareStack,
   Trash2,
   Unlock,
@@ -97,7 +98,7 @@ function InstanceProperties({
   objectId: string;
   count: number;
 }) {
-  const { scene, dispatch } = useEditor();
+  const { scene, dispatch, ui } = useEditor();
   const instance = scene.instances.find((i) => i.id === instanceId);
   const object = scene.objects.find((o) => o.id === objectId);
   if (!instance || !object) return null;
@@ -145,6 +146,85 @@ function InstanceProperties({
 
   return (
     <>
+      {ui.is3DMode && (
+        <PropertySection title="Transformación 3D (Spatial)">
+          <FieldRow label="Posición X">
+            <NumberField
+              value={instance.position3d?.x ?? (instance.x - 400) / 100}
+              onChange={(x) =>
+                patch({
+                  position3d: { ...(instance.position3d ?? { x: 0, y: 0, z: 0 }), x },
+                  x: Math.round(x * 100 + 400),
+                })
+              }
+            />
+          </FieldRow>
+          <FieldRow label="Posición Y">
+            <NumberField
+              value={instance.position3d?.y ?? (-instance.y + 300) / 100}
+              onChange={(y) =>
+                patch({
+                  position3d: { ...(instance.position3d ?? { x: 0, y: 0, z: 0 }), y },
+                  y: Math.round(-y * 100 + 300),
+                })
+              }
+            />
+          </FieldRow>
+          <FieldRow label="Posición Z">
+            <NumberField
+              value={instance.position3d?.z ?? instance.zOrder * 0.1}
+              onChange={(z) =>
+                patch({
+                  position3d: { ...(instance.position3d ?? { x: 0, y: 0, z: 0 }), z },
+                  zOrder: Math.round(z * 10),
+                })
+              }
+            />
+          </FieldRow>
+          <FieldRow label="Rotación Y (°)">
+            <NumberField
+              value={instance.rotation3d?.y ?? instance.angle}
+              onChange={(yRot) =>
+                patch({
+                  rotation3d: { ...(instance.rotation3d ?? { x: 0, y: 0, z: 0 }), y: yRot },
+                  angle: yRot,
+                })
+              }
+            />
+          </FieldRow>
+          <FieldRow label="Escala X / Y / Z">
+            <div className="flex gap-1 min-w-0 flex-1">
+              <NumberField
+                value={instance.scale3d?.x ?? 1}
+                onChange={(sx) =>
+                  patch({
+                    scale3d: { ...(instance.scale3d ?? { x: 1, y: 1, z: 1 }), x: sx },
+                    width: Math.round(sx * 64),
+                  })
+                }
+              />
+              <NumberField
+                value={instance.scale3d?.y ?? 1}
+                onChange={(sy) =>
+                  patch({
+                    scale3d: { ...(instance.scale3d ?? { x: 1, y: 1, z: 1 }), y: sy },
+                    height: Math.round(sy * 64),
+                  })
+                }
+              />
+              <NumberField
+                value={instance.scale3d?.z ?? 1}
+                onChange={(sz) =>
+                  patch({
+                    scale3d: { ...(instance.scale3d ?? { x: 1, y: 1, z: 1 }), z: sz },
+                  })
+                }
+              />
+            </div>
+          </FieldRow>
+        </PropertySection>
+      )}
+
       <PropertySection title={S.position}>
         <FieldRow label="X">
           <NumberField value={instance.x} onChange={(x) => patch({ x: Math.round(x) })} />
@@ -280,7 +360,7 @@ function InstanceProperties({
 /* -------------------------------------------------------------------- object */
 
 function ObjectProperties({ objectId }: { objectId: string }) {
-  const { scene, dispatch, project } = useEditor();
+  const { scene, dispatch, project, ui } = useEditor();
   const object = scene.objects.find((o) => o.id === objectId);
   if (!object) return null;
   const objectLocation: VariableScopeLocation = { scope: "object", objectId };
@@ -335,6 +415,93 @@ function ObjectProperties({ objectId }: { objectId: string }) {
           </div>
         </div>
       </div>
+
+      {(ui.is3DMode || object.meshType3D) && (
+        <PropertySection title="Material & Malla 3D (PBR)">
+          <FieldRow label="Tipo de Malla 3D">
+            <ChoiceField
+              value={object.meshType3D ?? "box"}
+              options={["box", "sphere", "cylinder", "cone", "torus", "plane", "light", "camera"]}
+              onChange={(meshType) =>
+                dispatch({
+                  type: "updateObject",
+                  id: objectId,
+                  patch: { meshType3D: meshType as any },
+                })
+              }
+            />
+          </FieldRow>
+          <FieldRow label="Color Material PBR">
+            <ColorField
+              value={object.material3D?.color ?? "#478CBF"}
+              onChange={(color) =>
+                dispatch({
+                  type: "updateObject",
+                  id: objectId,
+                  patch: {
+                    material3D: {
+                      ...(object.material3D ?? { roughness: 0.3, metalness: 0.2, wireframe: false }),
+                      color,
+                    },
+                  },
+                })
+              }
+            />
+          </FieldRow>
+          <FieldRow label="Rugosidad">
+            <NumberField
+              value={object.material3D?.roughness ?? 0.3}
+              onChange={(roughness) =>
+                dispatch({
+                  type: "updateObject",
+                  id: objectId,
+                  patch: {
+                    material3D: {
+                      ...(object.material3D ?? { color: "#478CBF", metalness: 0.2, wireframe: false }),
+                      roughness,
+                    },
+                  },
+                })
+              }
+            />
+          </FieldRow>
+          <FieldRow label="Metalicidad">
+            <NumberField
+              value={object.material3D?.metalness ?? 0.2}
+              onChange={(metalness) =>
+                dispatch({
+                  type: "updateObject",
+                  id: objectId,
+                  patch: {
+                    material3D: {
+                      ...(object.material3D ?? { color: "#478CBF", roughness: 0.3, wireframe: false }),
+                      metalness,
+                    },
+                  },
+                })
+              }
+            />
+          </FieldRow>
+          <FieldRow label="Malla Alambre">
+            <ToggleField
+              checked={object.material3D?.wireframe ?? false}
+              label="Wireframe"
+              onChange={(wireframe) =>
+                dispatch({
+                  type: "updateObject",
+                  id: objectId,
+                  patch: {
+                    material3D: {
+                      ...(object.material3D ?? { color: "#478CBF", roughness: 0.3, metalness: 0.2 }),
+                      wireframe,
+                    },
+                  },
+                })
+              }
+            />
+          </FieldRow>
+        </PropertySection>
+      )}
 
       <div className="grid grid-cols-2 gap-1 px-2 pb-1">
         <GdButton
@@ -409,7 +576,14 @@ function BehaviorSection({ objectId }: { objectId: string }) {
   return (
     <PropertySection title={`${S.behaviors} (${object.behaviors.length})`}>
       {object.behaviors.length === 0 ? (
-        <p className="px-3 py-1 text-[12.5px] text-text-secondary">{S.addYourFirstBehavior}</p>
+        <button
+          type="button"
+          onClick={() => dispatch({ type: "openDialog", dialog: { name: "behaviors", objectId } })}
+          className="w-full text-left px-3 py-1.5 text-[12.5px] text-[#8AD6FF] hover:underline cursor-pointer flex items-center gap-1.5"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          <span>{S.addYourFirstBehavior}</span>
+        </button>
       ) : null}
       {object.behaviors.map((behavior) => {
         const definition = BEHAVIORS.find((b) => b.typeId === behavior.type);
@@ -468,6 +642,28 @@ function BehaviorSection({ objectId }: { objectId: string }) {
           </div>
         );
       })}
+      <div className="flex gap-1.5 px-3 py-1">
+        <GdButton
+          variant="raised"
+          size="small"
+          icon={<Plus className="h-3.5 w-3.5" />}
+          onClick={() =>
+            dispatch({ type: "openDialog", dialog: { name: "behaviors", objectId } })
+          }
+        >
+          {S.addABehavior}
+        </GdButton>
+        <button
+          type="button"
+          onClick={() =>
+            dispatch({ type: "openDialog", dialog: { name: "behaviors", objectId } })
+          }
+          className="flex h-7 items-center gap-1.5 rounded bg-gradient-to-r from-[#8A2BE2] to-[#478CBF] px-2 text-[11px] font-semibold text-white hover:opacity-90 transition-opacity"
+        >
+          <Sparkles className="h-3.5 w-3.5 text-yellow-300" />
+          <span>Generar con IA</span>
+        </button>
+      </div>
     </PropertySection>
   );
 }

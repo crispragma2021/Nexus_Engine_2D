@@ -14,7 +14,7 @@ import {
 import { toast } from "sonner";
 import { useEditor } from "@/lib/editor/store";
 import { compileIntentToEvents } from "@/lib/editor/ai-logic";
-import { eventsToAgentPlan } from "@/lib/agent/planner";
+import { eventsToAgentPlan, planFromInstruction } from "@/lib/agent/planner";
 import {
   planWithAssistant,
   probeNexusAssistant,
@@ -33,6 +33,20 @@ interface AttachedFile {
   type: "doc" | "image" | "audio";
   content?: string;
   file: File;
+}
+
+/** Expande comandos breves como 'mando de pc' o 'botones para saltar' a descripciones explícitas. */
+function expandShortPrompt(raw: string): string {
+  const clean = raw.trim();
+  const lower = clean.toLowerCase();
+
+  if (/\b(?:mandos?|controles?)\s+(?:de\s+)?pc\b/.test(lower)) {
+    return "Colocar controles de teclado PC (Flechas Izquierda, Derecha, Arriba, Abajo) para mover el personaje";
+  }
+  if (/\b(?:botones?|mando)\s+(?:para\s+)?saltar\b/.test(lower)) {
+    return "Colocar mando de salto";
+  }
+  return clean;
 }
 
 export function QuickAutomationBar() {
@@ -68,14 +82,16 @@ export function QuickAutomationBar() {
     };
   }, [open, assistantEnabled]);
 
-  /** Respaldo determinista sin red: el compilador de eventos de siempre. */
+  /** Respaldo determinista sin red: el planificador estructurado completo (escenas, objetos, instancias, mandos y eventos). */
   const planLocally = React.useCallback(
     (instruction: string): AgentPlan | null => {
-      const objectNames = (scene.objects || []).map((object) => object.name);
-      const generated = compileIntentToEvents(instruction, { objectNames });
-      return generated.length === 0 ? null : eventsToAgentPlan(generated, scene.name);
+      const proposal = planFromInstruction(instruction, {
+        project,
+        activeSceneName: scene.name,
+      });
+      return proposal.plan;
     },
-    [scene],
+    [project, scene],
   );
 
   /** Ejecuta el plan aprobado por la sesión (validación + transacción atómica). */
@@ -115,6 +131,7 @@ export function QuickAutomationBar() {
         pendingPlan.id,
       );
     }
+    setPendingPlan(null);
     setPendingPlan(null);
     setSource(null);
     dispatch({ type: "ui", patch: { quickAutomationOpen: false } });
@@ -158,27 +175,111 @@ export function QuickAutomationBar() {
     setAttachments((prev) => prev.filter((_, i) => i !== index));
   };
 
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const cleanPrompt = prompt.trim();
+    const expandedPrompt = expandShortPrompt(prompt);
+    const cleanPrompt = expandedPrompt.trim();
     if (!cleanPrompt && attachments.length === 0) return;
+
+    if (expandedPrompt !== prompt) {
+      setPrompt(expandedPrompt);
+    }
 
     setBusy(true);
     try {
+      const imageAttachment = attachments.find((a) => a.type === "image");
+      if (imageAttachment) {
+        const dataUrl = await fileToDataUrl(imageAttachment.file);
+        const rawName = imageAttachment.name.replace(/\.[^/.]+$/, "").replace(/[^a-zA-Z0-9_]/g, "");
+        const objName = rawName ? rawName.charAt(0).toUpperCase() + rawName.slice(1) : "ObjetoCustom";
+        const isPlatform = /plataforma|suelo|piso|ground|platform|caja/i.test(cleanPrompt || imageAttachment.name);
+        const isButton = /boton|botón|mando|button|ui|control/i.test(cleanPrompt || imageAttachment.name);
+
+        const newObjId = uid("obj");
+        const newObj: GDObjectDef = {
+          id: newObjId,
+          name: objName,
+          type: isPlatform ? "TiledSpriteObject::TiledSprite" : "Sprite",
+          asset: dataUrl,
+          behaviors: isPlatform
+            ? [
+                {
+                  name: "Plataforma",
+                  type: "PlatformBehavior::PlatformBehavior",
+                  properties: { platformType: "Normal platform", canBeGrabbed: "yes", yGrabOffset: "0" },
+                },
+              ]
+            : isButton
+            ? [
+                {
+                  name: "Anclar",
+                  type: "AnchorBehavior::AnchorBehavior",
+                  properties: { anchor: "BottomLeft", relativeToWindow: "yes" },
+                },
+              ]
+            : [],
+          effects: [],
+          variables: [],
+          animations: [
+            {
+              name: "reposo",
+              loops: true,
+              timeBetweenFrames: 0,
+              images: [{ image: dataUrl, originX: 0, originY: 0, centerX: 0.5, centerY: 0.5, opacity: 255 }],
+              points: [],
+            },
+          ],
+        };
+
+        dispatch({ type: "addObject", object: newObj });
+        dispatch({
+          type: "addInstance",
+          objectId: newObjId,
+          x: isButton ? 80 : 360,
+          y: isButton ? 460 : 300,
+          layer: isButton ? "Interfaz" : "Base layer",
+        });
+        toast.success(`¡Objeto '${objName}' integrado desde la imagen '${imageAttachment.name}'!`);
+        setPrompt("");
+        setAttachments([]);
+        setBusy(false);
+        return;
+      }
+
       let combinedPrompt = cleanPrompt;
       const docTexts = attachments
         .filter((a) => a.content)
         .map((a) => `[Documento: ${a.name}]\n${a.content}`)
         .join("\n\n");
 
-      if (docTexts) {
-        combinedPrompt = `${docTexts}\n\nInstrucción: ${cleanPrompt}`;
+      const selectedInstanceNames = scene.instances
+        .filter((i) => ui.selectedInstanceIds.includes(i.id))
+        .map((i) => scene.objects.find(o => o.id === i.objectId)?.name)
+        .filter((name): name is string => Boolean(name));
+      const selectedObjectNames = scene.objects
+        .filter((o) => ui.selectedObjectIds.includes(o.id))
+        .map((o) => o.name);
+      
+      const targetContext = [...new Set([...selectedInstanceNames, ...selectedObjectNames])];
+      if (targetContext.length > 0) {
+        combinedPrompt = `[Objetos seleccionados: ${targetContext.join(", ")}]\n\nInstrucción: ${combinedPrompt}`;
+      } else if (docTexts) {
+        combinedPrompt = `Instrucción: ${combinedPrompt}`;
       }
 
-      // Flujo de AGENT_ARCHITECTURE.md §2: instrucción → POST /api/agent (Gemini
-      // vía gateway servidor) → validación del plan candidato → aprobación →
-      // commit. Si el gateway no está configurado o falla, entra el planificador
-      // local determinista y el asistente sigue siendo útil sin red.
+      if (docTexts) {
+        combinedPrompt = `${docTexts}\n\n${combinedPrompt}`;
+      }
+
       const outcome = await planWithAssistant({
         instruction: combinedPrompt,
         project,
@@ -199,14 +300,13 @@ export function QuickAutomationBar() {
         toast.info("Nexus AI no pudo generar el plan: se usó el planificador local.");
       }
 
-      // La sesión decide si hace falta aprobación (Supervised siempre aprueba).
       if (needsApproval(outcome.plan)) {
         setPendingPlan(outcome.plan);
         return;
       }
       applyPlan(outcome.plan);
-    } catch {
-      toast.error("Error al procesar la instrucción del asistente.");
+    } catch (err: any) {
+      toast.error(err?.message || "Error al procesar la instrucción del asistente.");
     } finally {
       setBusy(false);
     }
@@ -255,7 +355,6 @@ export function QuickAutomationBar() {
           </button>
         </div>
 
-        {/* Chips de archivos adjuntos (única zona con scroll propio) */}
         {attachments.length > 0 && (
           <div className="mb-2 flex max-h-[22vh] flex-wrap gap-1.5 overflow-y-auto overscroll-contain pr-0.5">
             {attachments.map((att, idx) => (
@@ -279,7 +378,6 @@ export function QuickAutomationBar() {
           </div>
         )}
 
-        {/* Plan candidato en espera de aprobación (Supervised es el modo por defecto) */}
         {pendingPlan ? (
           <div className="mb-2 rounded-xl border border-[#6868E8]/60 bg-[#17171F] p-2">
             <div className="mb-1 flex items-center justify-between gap-2">
@@ -289,7 +387,7 @@ export function QuickAutomationBar() {
                 ) : (
                   <Cpu className="h-3 w-3" />
                 )}
-                {source === "nexus-ai" ? "Nexus AI · /api/agent" : "Planificador local"}
+                {source === "nexus-ai" ? "Nexus AI · Gemini 2.5 Pro" : "Planificador local"}
               </span>
               <span className="text-[10.5px] text-text-placeholder">
                 {pendingPlan.operations.length}{" "}
@@ -326,7 +424,6 @@ export function QuickAutomationBar() {
           </div>
         ) : null}
 
-        {/* El gateway sin configurar se avisa una sola vez, sin bloquear nada */}
         {assistantEnabled === false ? (
           <p className="mb-1.5 text-[10px] text-text-placeholder">
             Nexus AI no está configurado en el servidor (GEMINI_API_KEY): se usará el planificador
@@ -334,9 +431,10 @@ export function QuickAutomationBar() {
           </p>
         ) : null}
 
-        {/* Input con estética limpia estilo Gemini */}
+
+
+        {/* Input con badge predictivo inline */}
         <div className="relative flex items-center gap-1.5 rounded-xl border border-[#3E3E52] bg-[#1B1B24] px-2 py-1.5 focus-within:border-[#7A68EE]">
-          {/* Botón de adjuntar */}
           <div className="relative">
             <button
               type="button"
@@ -347,7 +445,6 @@ export function QuickAutomationBar() {
               <Paperclip className="h-4 w-4" />
             </button>
 
-            {/* Menú emergente de tipos de archivo */}
             {showAttachMenu && (
               <div className="absolute bottom-full mb-2 left-0 z-50 flex w-48 flex-col gap-1 rounded-xl border border-separator bg-[#1A1A24] p-1.5 shadow-xl">
                 <button
@@ -390,7 +487,7 @@ export function QuickAutomationBar() {
             ref={inputRef}
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Pregunta a Nexus AI o describe las acciones de la escena..."
+            placeholder="Pregunta a Nexus AI o describe las acciones..."
             className="flex-1 bg-transparent text-xs text-foreground placeholder:text-text-placeholder focus:outline-none"
           />
 

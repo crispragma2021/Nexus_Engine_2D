@@ -12,7 +12,7 @@ import { PropertiesPanel } from "./PropertiesPanel";
 
 type SheetKey = "objects" | "groups" | "properties" | "instances" | "layers";
 
-const ITEMS: { key: SheetKey; label: string; icon: React.ElementType }[] = [
+const ITEMS: { key: SheetKey; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { key: "objects", label: S.objects, icon: Box },
   { key: "groups", label: S.objectGroups, icon: Boxes },
   { key: "properties", label: S.properties, icon: PenLine },

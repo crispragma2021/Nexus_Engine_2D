@@ -31,9 +31,14 @@ import { ProjectManagerDrawer } from "./ProjectManagerDrawer";
 import { InlineAiPrompt } from "./InlineAiPrompt";
 import { QuickAutomationBar } from "./QuickAutomationBar";
 import { AgentPanel } from "./AgentPanel";
+import { SpriteEditorDialog } from "./SpriteEditorDialog";
 import { useEditorShortcuts } from "./hooks/use-editor-shortcuts";
 import * as React from "react";
 import { toast } from "sonner";
+import { GodotNodeTree } from "./GodotNodeTree";
+import { SceneCanvas3D } from "./SceneCanvas3D";
+import { GodotInspector3D } from "./GodotInspector3D";
+import { GodotFileSystem } from "./GodotFileSystem";
 
 /** Escena / Eventos switcher of the active scene tab. */
 function SceneSubTabs() {
@@ -81,6 +86,10 @@ function RightColumn() {
     { id: "instances", label: S.instances, icon: List },
     { id: "layers", label: S.layers, icon: Layers },
   ] as const;
+
+  if (ui.is3DMode) {
+    return <GodotInspector3D />;
+  }
 
   return (
     <div className="hidden w-[318px] shrink-0 flex-col border-l border-separator bg-toolbar md:flex">
@@ -134,6 +143,13 @@ function RightColumn() {
 
 function LeftColumn() {
   const { ui } = useEditor();
+  if (ui.is3DMode) {
+    return (
+      <div className="hidden w-[236px] shrink-0 flex-col border-r border-separator bg-toolbar md:flex">
+        <GodotNodeTree />
+      </div>
+    );
+  }
   return (
     <div className="hidden w-[236px] shrink-0 flex-col border-r border-separator bg-toolbar md:flex">
       <ObjectsPanel />
@@ -177,7 +193,7 @@ function Workspace() {
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <SceneSubTabs />
       <div className="flex min-h-0 flex-1">
-        {ui.tab === "events" ? <EventsEditor /> : <SceneCanvas />}
+        {ui.tab === "events" ? <EventsEditor /> : (ui.is3DMode ? <SceneCanvas3D /> : <SceneCanvas />)}
       </div>
     </div>
   );
@@ -222,10 +238,13 @@ function Body() {
     <div className="flex h-dvh flex-col overflow-hidden bg-window text-foreground">
       <ProjectTitlebar />
       <TopToolbar />
-      <main className="flex min-h-0 flex-1 pb-[var(--mobile-editor-dock-height)] md:pb-0">
-        {ui.showLeftPanel && ui.tab === "scene" ? <LeftColumn /> : <div />}
-        <Workspace />
-        {ui.showRightPanel ? <RightColumn /> : null}
+      <main className="flex min-h-0 flex-1 flex-col pb-[var(--mobile-editor-dock-height)] md:pb-0">
+        <div className="flex min-h-0 flex-1">
+          {ui.showLeftPanel && ui.tab === "scene" ? <LeftColumn /> : <div />}
+          <Workspace />
+          {ui.showRightPanel ? <RightColumn /> : null}
+        </div>
+        <GodotFileSystem />
       </main>
       <MobileBottomBar />
       <QuickAutomationBar />
@@ -234,6 +253,7 @@ function Body() {
       {/* dialogs */}
       <NewObjectDialog />
       <ObjectEditorDialog />
+      <SpriteEditorDialog />
       <BehaviorsDialog />
       <EffectsListDialog />
       <ScenePropertiesDialog />

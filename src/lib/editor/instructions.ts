@@ -258,6 +258,18 @@ export const INSTRUCTIONS: InstructionDef[] = [
 
   /* ------------------------------------------------------------ Colisiones */
   {
+    id: "Collision3D",
+    kind: "condition",
+    category: "collision",
+    name: "Están en colisión 3D",
+    description: "Verdadero cuando dos objetos chocan físicamente en el espacio 3D (Rapier3D).",
+    sentence: "{0} está en colisión 3D con {1}",
+    parameters: [
+      OBJ(),
+      P("object2", "object", "Objeto", "Cubo"),
+    ],
+  },
+  {
     id: "Collision",
     kind: "condition",
     category: "collision",
@@ -476,6 +488,20 @@ export const INSTRUCTIONS: InstructionDef[] = [
       P("x", "expression", "Fuerza en X", "150"),
       P("y", "expression", "Fuerza en Y", "0"),
       P("Damping", "yesno", "Aplicar amortiguación", "yes"),
+    ],
+  },
+  {
+    id: "ApplyImpulse3D",
+    kind: "action",
+    category: "sprite",
+    name: "Aplicar impulso 3D",
+    description: "Empuja un objeto (RigidBody3D) en el espacio con una fuerza instantánea.",
+    sentence: "Aplicar impulso 3D a {0} de x: {1} y: {2} z: {3}",
+    parameters: [
+      OBJ(),
+      P("x", "expression", "Impulso en X", "0"),
+      P("y", "expression", "Impulso en Y", "10"),
+      P("z", "expression", "Impulso en Z", "0"),
     ],
   },
   {

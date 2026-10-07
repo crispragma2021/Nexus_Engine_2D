@@ -196,7 +196,7 @@ const sceneError = (sceneName: unknown): string | null =>
 
 const requireObject = (scene: GDScene, objectId: unknown): GDObjectDef | null => {
   if (typeof objectId !== "string") return null;
-  return scene.objects.find((object) => object.id === objectId) ?? null;
+  return scene.objects.find((object) => object.id === objectId || object.name === objectId) ?? null;
 };
 
 const requireInstance = (scene: GDScene, instanceId: unknown): GDInstance | null => {

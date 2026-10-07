@@ -199,6 +199,7 @@ export class GameRuntime {
       type: def?.type ?? "Sprite",
       ...(def?.asset ? { asset: def.asset } : {}),
       ...(frame?.hitBox ? { hitBox: frame.hitBox } : {}),
+      ...(first?.points ? { points: first.points } : {}),
       x: patch.x,
       y: patch.y,
       width: patch.width,
@@ -230,6 +231,9 @@ export class GameRuntime {
       onFloor: false,
       jumping: false,
       falling: false,
+      jumpCount: 0,
+      maxJumps: asNumber(platformer?.["maxJumps"], 2),
+      jumpPressedPrev: false,
       vx: 0,
       vy: 0,
       gravity: asNumber(platformer?.["gravity"], PHYSICS.gravity),
@@ -1214,12 +1218,16 @@ export class GameRuntime {
   }
 
   private jump(object: RTObject) {
-    if (!object.onFloor || object.ignoreControls) return;
+    if (object.ignoreControls) return;
     const props = this.platformerProps(object);
     const jumpSpeed = asNumber(props["jumpSpeed"], PHYSICS.jumpSpeed);
-    object.vy = -jumpSpeed;
-    object.onFloor = false;
-    object.jumping = true;
+    const maxJumps = asNumber(props["maxJumps"], object.maxJumps ?? 2);
+    if (object.onFloor || (object.jumpCount ?? 0) < maxJumps) {
+      object.vy = -jumpSpeed;
+      object.onFloor = false;
+      object.jumping = true;
+      object.jumpCount = (object.jumpCount ?? 0) + 1;
+    }
   }
 
   /** Properties of the platformer behavior, whatever its instance name is. */
@@ -1335,11 +1343,36 @@ export class GameRuntime {
         // to jump) as long as the behavior doesn't ignore the default controls —
         // the "simulate control" actions then add to them, they don't replace them.
         const useDefaults = !object.ignoreControls;
-        const left = object.controls.left || (useDefaults && this.isKeyPressed("Left"));
-        const right = object.controls.right || (useDefaults && this.isKeyPressed("Right"));
+        const left =
+          object.controls.left ||
+          (useDefaults &&
+            (this.isKeyPressed("Left") ||
+              this.isKeyPressed("a") ||
+              this.isKeyPressed("A")));
+        const right =
+          object.controls.right ||
+          (useDefaults &&
+            (this.isKeyPressed("Right") ||
+              this.isKeyPressed("d") ||
+              this.isKeyPressed("D")));
+
         if (left) object.vx -= acceleration * delta;
         if (right) object.vx += acceleration * delta;
-        if (useDefaults && this.isKeyPressed("Shift")) this.jump(object);
+
+        const jumpKeyPressed =
+          object.controls.jump ||
+          (useDefaults &&
+            (this.isKeyPressed("Space") ||
+              this.isKeyPressed("Up") ||
+              this.isKeyPressed("Shift") ||
+              this.isKeyPressed("w") ||
+              this.isKeyPressed("W")));
+
+        if (jumpKeyPressed && !object.jumpPressedPrev) {
+          this.jump(object);
+        }
+        object.jumpPressedPrev = jumpKeyPressed;
+
         object.vx = clamp(object.vx, -maxSpeed, maxSpeed);
         if (!left && !right) {
           object.vx -= object.vx * Math.min(1, friction * delta);
@@ -1362,20 +1395,59 @@ export class GameRuntime {
 
       if (isCharacter) {
         object.onFloor = false;
+        const feetBottom = getCharacterFeetBottom(object);
         for (const platform of platforms) {
           if (!overlaps(object, platform, 0)) continue;
-          const previousBottom = object.y + object.height - object.vy * delta;
-          const isOneWay = this.platformProps(platform)["platformType"] === "One-way platform";
-          if (object.vy >= 0 && previousBottom <= platform.y + (isOneWay ? 4 : 8)) {
-            object.y = platform.y - object.height;
+          const currentFeetY = object.y + feetBottom;
+          const previousFeetY = currentFeetY - object.vy * delta;
+          const platformTop = getPlatformTopSurface(platform);
+          const platformType = this.platformProps(platform)["platformType"] ?? "Normal platform";
+          const isOneWay = platformType === "One-way platform";
+          if (object.vy >= 0 && previousFeetY <= platformTop + (isOneWay ? 4 : 12)) {
+            object.y = platformTop - feetBottom;
             object.vy = 0;
             object.onFloor = true;
+          } else if (!isOneWay) {
+            if (object.vx > 0 && object.x + object.width > platform.x && object.x < platform.x) {
+              object.x = platform.x - object.width;
+              object.vx = 0;
+            } else if (object.vx < 0 && object.x < platform.x + platform.width && object.x + object.width > platform.x + platform.width) {
+              object.x = platform.x + platform.width;
+              object.vx = 0;
+            }
           }
         }
-        if (object.y + object.height > this.height) {
-          object.y = this.height - object.height;
+        if (object.y + feetBottom > this.height) {
+          object.y = this.height - feetBottom;
           object.vy = 0;
           object.onFloor = true;
+        }
+
+        if (object.onFloor) {
+          object.jumpCount = 0;
+        }
+      }
+
+      if (this.hasBehavior(object, "DraggableBehavior::Draggable")) {
+        const isPointerDown = this.mouse.has("Left");
+        const isOver = pointInObject(object, this.pointer.x, this.pointer.y);
+        if (isPointerDown) {
+          if (!object.dragging?.active && isOver) {
+            object.dragging = {
+              active: true,
+              offsetX: this.pointer.x - object.x,
+              offsetY: this.pointer.y - object.y,
+            };
+          }
+        } else if (object.dragging) {
+          object.dragging.active = false;
+        }
+
+        if (object.dragging?.active) {
+          object.x = this.pointer.x - object.dragging.offsetX;
+          object.y = this.pointer.y - object.dragging.offsetY;
+          object.vx = 0;
+          object.vy = 0;
         }
       }
 
@@ -1513,6 +1585,49 @@ function overlaps(a: RTObject, b: RTObject, pad: number): boolean {
   return true;
 }
 
+function getCharacterFeetBottom(object: RTObject): number {
+  const sueloPoint = object.points?.find(
+    (point) => point.name === "suelo" || point.name === "ground" || point.name === "feet",
+  );
+  if (sueloPoint) {
+    const referenceHeight = Math.max(1, object.hitBox?.referenceHeight ?? object.height);
+    return (sueloPoint.y / referenceHeight) * object.height;
+  }
+
+  const mask = object.hitBox;
+  if (mask) {
+    const referenceHeight = Math.max(1, mask.referenceHeight ?? object.height);
+    if (mask.kind === "polygon" && mask.vertices.length >= 3) {
+      let maxY = 0;
+      for (const vertex of mask.vertices) {
+        if (vertex.y > maxY) maxY = vertex.y;
+      }
+      return (maxY / referenceHeight) * object.height;
+    }
+    return ((mask.y + mask.height) / referenceHeight) * object.height;
+  }
+
+  return object.height;
+}
+
+function getPlatformTopSurface(platform: RTObject): number {
+  const mask = platform.hitBox;
+  if (mask) {
+    const referenceHeight = Math.max(1, mask.referenceHeight ?? platform.height);
+    if (mask.kind === "polygon" && mask.vertices.length >= 3) {
+      let minY = referenceHeight;
+      for (const vertex of mask.vertices) {
+        if (vertex.y < minY) minY = vertex.y;
+      }
+      return platform.y + (minY / referenceHeight) * platform.height;
+    }
+    return platform.y + (mask.y / referenceHeight) * platform.height;
+  }
+  // Tiled / Grass platform tops feature grass blades extending up ~4px.
+  // Floor surface is placed where feet sit flush on top of the grass tile.
+  return platform.y + 4;
+}
+
 function collisionPolygon(object: RTObject): CollisionPoint[] {
   const mask = object.hitBox;
   const source =
@@ -1607,21 +1722,35 @@ function compareStrings(left: string, operator: string, right: string): boolean 
 }
 
 export function applyModOp(current: number, op: string, value: number): number {
-  switch (op) {
+  const normalized = (op || "").trim().toLowerCase();
+  switch (normalized) {
     case "add":
+    case "+":
+    case "+=":
       return current + value;
+    case "sub":
     case "subtract":
+    case "-":
+    case "-=":
       return current - value;
+    case "mul":
     case "multiply":
+    case "*":
+    case "*=":
       return current * value;
+    case "div":
     case "divide":
+    case "/":
+    case "/=":
       return value === 0 ? current : current / value;
     case "max":
       return Math.max(current, value);
     case "min":
       return Math.min(current, value);
-    case "":
+    case "set":
+    case "=":
     case "set to":
+    case "":
     default:
       return value;
   }

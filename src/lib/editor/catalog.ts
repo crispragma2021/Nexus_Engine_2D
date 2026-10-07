@@ -6,6 +6,7 @@ import playerUrl from "../../assets/player.png";
 import coinUrl from "../../assets/coin.png";
 import platformUrl from "../../assets/platform.png";
 import slimeUrl from "../../assets/slime.png";
+import demoLevelBgUrl from "../../assets/demo_level_bg.jpg";
 import type { GDResource } from "./types";
 
 /** Project files shipped with the sample (GDevelop resolves resources by name). */
@@ -14,6 +15,7 @@ export const PROJECT_ASSETS: Record<string, string> = {
   "coin.png": coinUrl,
   "platform.png": platformUrl,
   "slime.png": slimeUrl,
+  "demo_level_bg.jpg": demoLevelBgUrl,
 };
 
 export const resolveAsset = (
@@ -155,6 +157,11 @@ export const objectTypeByTypeId = (typeId: string): ObjectTypeEntry | undefined 
 };
 
 export const objectTypeLabel = (type: string): string => objectTypeByTypeId(type)?.name ?? type;
+
+export const isAnimatedSprite = (type: string): boolean => {
+  const id = objectTypeId(type);
+  return id === "Sprite" || id === "SpriteObject::SpriteSheet";
+};
 
 export const isSpriteLike = (type: string): boolean => {
   const id = objectTypeId(type);
@@ -360,6 +367,60 @@ export const BEHAVIORS: BehaviorEntry[] = [
       { key: "allowDiagonals", label: "Permitir diagonales", type: "yesno", value: "yes" },
       { key: "cellWidth", label: "Ancho de celda", type: "number", value: "32" },
       { key: "cellHeight", label: "Altura de celda", type: "number", value: "32" },
+    ],
+  },
+  {
+    typeId: "TopDownMovementBehavior::TopDownMovementBehavior",
+    name: "Movimiento cenital (Top-down 8 direcciones)",
+    description: "Mueve el objeto en 4 u 8 direcciones (arriba, abajo, izquierda, derecha) con aceleración.",
+    icon: "topdown",
+    helpPath: "/extensions/topdown-movement/",
+    properties: [
+      { key: "acceleration", label: "Aceleración", type: "number", value: "600" },
+      { key: "maxSpeed", label: "Velocidad máxima", type: "number", value: "200" },
+      { key: "rotationSpeed", label: "Velocidad de rotación", type: "number", value: "180" },
+      { key: "allowDiagonals", label: "Permitir movimiento en diagonal", type: "yesno", value: "yes" },
+    ],
+  },
+  {
+    typeId: "DestroyOutsideBehavior::DestroyOutside",
+    name: "Destruir al salir de la pantalla",
+    description: "Elimina automáticamente el objeto cuando sale de los límites visibles de la ventana.",
+    icon: "destroy",
+    helpPath: "/extensions/destroy-outside/",
+    properties: [
+      { key: "extraMargin", label: "Margen extra (píxeles)", type: "number", value: "0" },
+    ],
+  },
+  {
+    typeId: "StayOnScreenBehavior::StayOnScreen",
+    name: "Permanecer en pantalla",
+    description: "Evita que el objeto salga de los bordes visibles del juego.",
+    icon: "screen",
+    helpPath: "/extensions/stay-on-screen/",
+    properties: [
+      { key: "margin", label: "Margen (píxeles)", type: "number", value: "0" },
+    ],
+  },
+  {
+    typeId: "BounceBehavior::Bounce",
+    name: "Rebote automático",
+    description: "Hace rebotar el objeto al chocar con otros objetos o bordes.",
+    icon: "bounce",
+    helpPath: "/extensions/bounce/",
+    properties: [
+      { key: "elasticity", label: "Elasticidad (0 a 1)", type: "number", value: "1" },
+    ],
+  },
+  {
+    typeId: "FireBulletBehavior::FireBullet",
+    name: "Disparar proyectiles",
+    description: "Permite al objeto disparar balas o proyectiles hacia una dirección o hacia el ratón.",
+    icon: "bullet",
+    helpPath: "/extensions/fire-bullet/",
+    properties: [
+      { key: "cooldown", label: "Tiempo entre disparos (s)", type: "number", value: "0.2" },
+      { key: "bulletSpeed", label: "Velocidad de la bala", type: "number", value: "400" },
     ],
   },
 ];

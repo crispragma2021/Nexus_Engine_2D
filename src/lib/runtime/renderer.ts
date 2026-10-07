@@ -139,6 +139,28 @@ export function renderScene(
         ctx.drawImage(image, -viewW / 2, -viewH / 2, viewW, viewH);
       }
       applyTint(ctx, object.tint, object.colorOverlay, viewW, viewH);
+    } else if (/boton|mando|button|touch/i.test(object.name)) {
+      const radius = Math.min(viewW, viewH) / 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, radius, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(30, 32, 48, 0.85)";
+      ctx.fill();
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = "rgba(169, 150, 255, 0.9)";
+      ctx.stroke();
+
+      ctx.fillStyle = "#ffffff";
+      ctx.font = `bold ${Math.max(12, radius * 0.65)}px sans-serif`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      const icon = /salto|jump/i.test(object.name)
+        ? "▲"
+        : /izq|left/i.test(object.name)
+        ? "◀"
+        : /der|right/i.test(object.name)
+        ? "▶"
+        : "🔘";
+      ctx.fillText(icon, 0, 0);
     } else {
       ctx.fillStyle = object.tint
         ? `rgb(${object.tint[0]}, ${object.tint[1]}, ${object.tint[2]})`
@@ -194,9 +216,24 @@ function drawTiled(
   ctx.beginPath();
   ctx.rect(-width / 2, -height / 2, width, height);
   ctx.clip();
-  for (let x = -width / 2; x < width / 2; x += tileW) {
-    for (let y = -height / 2; y < height / 2; y += tileH) {
-      ctx.drawImage(image, x, y, tileW, tileH);
+  try {
+    const pattern = ctx.createPattern(image, "repeat");
+    if (pattern) {
+      ctx.translate(-width / 2, -height / 2);
+      ctx.fillStyle = pattern;
+      ctx.fillRect(0, 0, width, height);
+    } else {
+      for (let x = -width / 2; x < width / 2; x += tileW) {
+        for (let y = -height / 2; y < height / 2; y += tileH) {
+          ctx.drawImage(image, x, y, tileW, tileH);
+        }
+      }
+    }
+  } catch {
+    for (let x = -width / 2; x < width / 2; x += tileW) {
+      for (let y = -height / 2; y < height / 2; y += tileH) {
+        ctx.drawImage(image, x, y, tileW, tileH);
+      }
     }
   }
   ctx.restore();

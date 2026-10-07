@@ -14,6 +14,8 @@ export interface RTObject {
   asset?: string;
   /** Current frame collision geometry, scaled with the runtime instance. */
   hitBox?: GDFrameHitBox;
+  /** Current animation frame custom points (e.g. suelo, cañón, origin) */
+  points?: Array<{ name: string; x: number; y: number }>;
   x: number;
   y: number;
   width: number;
@@ -50,6 +52,9 @@ export interface RTObject {
   onFloor: boolean;
   jumping: boolean;
   falling: boolean;
+  jumpCount?: number;
+  maxJumps?: number;
+  jumpPressedPrev?: boolean;
   vx: number;
   vy: number;
   gravity: number;
@@ -74,6 +79,7 @@ export interface RTObject {
   colorOverlay: [number, number, number, number] | null;
   effects?: { type: string; name?: string; parameters: Record<string, string> }[];
   variables: Record<string, string>;
+  dragging?: { active: boolean; offsetX: number; offsetY: number };
   destroyed: boolean;
 }
 

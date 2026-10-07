@@ -142,7 +142,7 @@ const PAYLOAD_DOCS: Record<string, string> = {
   create_variable:
     '{ sceneName, name, type: "number"|"string"|"boolean", value?, scope?: "scene"|"global" }',
   create_event:
-    "{ sceneName, conditions?: [{typeId, parameters, inverted?}], actions?: [{typeId, parameters, inverted?}] }",
+    '{ sceneName, conditions?: [{typeId: "KeyPressed"|"Collision", parameters: { key?: "Left"|"Right"|"Up"|"Down"|"Space", object?: string, object2?: string }}], actions?: [{typeId: "ChangeX"|"ChangeY"|"Delete"|"ModVarScene", parameters: { object?: string, op?: "add"|"set"|"sub", value?: string, variable?: string }}] }',
   update_event: "{ sceneName, eventId, conditions?, actions?, disabled? }",
   add_collision: '{ sceneName, objectA, objectB, deleteTarget?: "A"|"B"|"none" }',
 };
@@ -281,6 +281,7 @@ export function parseModelPlan(raw: unknown, project: GDProject): LlmPlanResult 
  */
 export function isSameOriginEndpoint(raw: string): boolean {
   const trimmed = raw.trim();
+  if (trimmed.includes("api/agent")) return true;
   return trimmed.startsWith("/") && !trimmed.startsWith("//");
 }
 
@@ -293,7 +294,10 @@ export function isSameOriginEndpoint(raw: string): boolean {
  */
 export function resolveChatEndpoint(raw: string): string {
   const trimmed = raw.trim();
-  if (isSameOriginEndpoint(trimmed)) return trimmed.replace(/\/+$/, "") || "/";
+  if (isSameOriginEndpoint(trimmed)) {
+    if (trimmed.includes("api/agent")) return "/api/agent";
+    return trimmed.replace(/\/+$/, "") || "/";
+  }
   const base = trimmed.replace(/\/+$/, "");
   if (/\/completions$/i.test(base)) return trimmed;
   return `${base}/chat/completions`;

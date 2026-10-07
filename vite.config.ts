@@ -1,4 +1,4 @@
-import { defineConfig, type Plugin, type UserConfig } from "vite";
+import { defineConfig, loadEnv, type Plugin, type UserConfig } from "vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
@@ -13,13 +13,13 @@ import { handleGatewayNodeRequest } from "./src/lib/agent/gateway-node";
  * producción. Sin `GEMINI_API_KEY` en el entorno responde 503 y la UI continúa
  * con el planificador local determinista.
  */
-function nexusAgentGateway(): Plugin {
+function nexusAgentGateway(env: Record<string, string>): Plugin {
   return {
     name: "nexus-agent-gateway",
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         try {
-          if (await handleGatewayNodeRequest(req, res)) return;
+          if (await handleGatewayNodeRequest(req, res, { env: { ...process.env, ...env } })) return;
         } catch {
           // Nunca se bloquea el servidor de desarrollo por el gateway.
         }
@@ -29,7 +29,7 @@ function nexusAgentGateway(): Plugin {
     configurePreviewServer(server) {
       server.middlewares.use(async (req, res, next) => {
         try {
-          if (await handleGatewayNodeRequest(req, res)) return;
+          if (await handleGatewayNodeRequest(req, res, { env: { ...process.env, ...env } })) return;
         } catch {
           // Idem en `vite preview`.
         }
@@ -39,9 +39,10 @@ function nexusAgentGateway(): Plugin {
   };
 }
 
-export default defineConfig(({ command }): UserConfig => {
+export default defineConfig(({ mode, command }): UserConfig => {
+  const loadedEnv = loadEnv(mode, process.cwd(), "");
   const config: UserConfig = {
-    plugins: [tanstackStart(), viteReact(), tailwindcss(), nexusAgentGateway()],
+    plugins: [tanstackStart(), viteReact(), tailwindcss(), nexusAgentGateway(loadedEnv)],
     resolve: {
       alias: {
         "@": "/src",
@@ -54,10 +55,8 @@ export default defineConfig(({ command }): UserConfig => {
     // editor 2D desde la red (LAN/proxy) en el puerto 8080.
     config.server = {
       host: "0.0.0.0",
-      port: 8080,
+      port: Number(process.env["PORT"]) || 5175,
       strictPort: true,
-      // Permite que el túnel de Cloudflare (dominios públicos) acceda al
-      // servidor en desarrollo sin ser bloqueado por Vite.
       allowedHosts: true,
     };
   }

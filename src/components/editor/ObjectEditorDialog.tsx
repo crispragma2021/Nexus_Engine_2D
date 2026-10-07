@@ -18,6 +18,7 @@ import {
 import { useEditor } from "@/lib/editor/store";
 import {
   OBJECT_TYPES,
+  isAnimatedSprite,
   isSpriteLike,
   isTextLike,
   objectTypeLabel,
@@ -59,7 +60,7 @@ export function ObjectEditorDialog() {
 
   const animations = object.animations ?? [];
   const animation = animations[animationIndex];
-  const hasAnimations = isSpriteLike(object.type);
+  const hasAnimations = isAnimatedSprite(object.type);
   const patchObject = (patch: Partial<GDObjectDef>) =>
     dispatch({ type: "updateObject", id: object.id, patch });
 
@@ -210,18 +211,32 @@ export function ObjectEditorDialog() {
                   <span className="text-[11px] text-text-placeholder">
                     {animation.images.length}
                   </span>
-                  <GdButton
-                    size="small"
-                    variant="raised"
-                    className="ml-auto"
-                    icon={<Plus className="h-3.5 w-3.5" />}
-                    onClick={() => {
-                      dispatch({ type: "addObjectFrame", objectId, animationIndex });
-                      setFrameIndex(animation.images.length);
-                    }}
-                  >
-                    Añadir fotograma
-                  </GdButton>
+                  <div className="ml-auto flex items-center gap-2">
+                    <GdButton
+                      size="small"
+                      variant="raised"
+                      icon={<ImageIcon className="h-3.5 w-3.5" />}
+                      onClick={() => {
+                        dispatch({
+                          type: "openDialog",
+                          dialog: { name: "spriteEditor", objectId, animationIndex, frameIndex },
+                        });
+                      }}
+                    >
+                      Editar Sprite con IA
+                    </GdButton>
+                    <GdButton
+                      size="small"
+                      variant="raised"
+                      icon={<Plus className="h-3.5 w-3.5" />}
+                      onClick={() => {
+                        dispatch({ type: "addObjectFrame", objectId, animationIndex });
+                        setFrameIndex(animation.images.length);
+                      }}
+                    >
+                      Añadir fotograma
+                    </GdButton>
+                  </div>
                 </div>
 
                 <div className="flex min-h-32 flex-wrap gap-2 rounded border border-separator bg-[#101017] p-2">

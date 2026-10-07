@@ -77,6 +77,7 @@ export interface VariableScopeLocation {
 export type EditorDialog =
   | { name: "newObject" }
   | { name: "objectEditor"; objectId: string }
+  | { name: "spriteEditor"; objectId: string; animationIndex: number; frameIndex: number }
   | { name: "behaviors"; objectId: string }
   | { name: "effects"; targetKind: "object" | "instance" | "layer"; targetId: string }
   | { name: "sceneProperties" }
@@ -91,6 +92,7 @@ export type EditorDialog =
     }
   | { name: "externalEvents"; eventsName: string }
   | { name: "share"; tab: "publish" | "invite" }
+  | { name: "assetCatalog3D" }
   | null;
 
 export interface InlineAiSession {
@@ -127,6 +129,8 @@ interface UIState {
   showPropertiesPanel: boolean;
   showInstancesPanel: boolean;
   showLayersPanel: boolean;
+  is3DMode: boolean;
+  gizmoMode3D: "select" | "translate" | "rotate" | "scale";
   zoom: number;
   pan: { x: number; y: number };
   showHitMasks: boolean;
@@ -154,7 +158,7 @@ type Action =
   | { type: "ui"; patch: Partial<UIState> }
   | { type: "openDialog"; dialog: NonNullable<EditorDialog> }
   | { type: "closeDialog" }
-  | { type: "openInlineAi"; x: number; y: number }
+  | { type: "openInlineAi"; x: number; y: number; targetName?: string }
   | { type: "closeInlineAi" }
   | { type: "markSaved" }
   | { type: "openTab"; tab: Omit<OpenedTab, "id"> & { id?: string } }
@@ -243,6 +247,7 @@ type Action =
   | { type: "moveInstances"; ids: string[]; dx: number; dy: number }
   | { type: "setInstancesPositions"; positions: { id: string; x: number; y: number }[] }
   | { type: "updateInstance"; id: string; patch: Partial<GDInstance> }
+  | { type: "reparentInstance"; id: string; newParentId: string | undefined }
   | { type: "deleteInstances"; ids: string[] }
   | { type: "duplicateInstances"; ids: string[] }
   | { type: "setInstancesZOrder"; ids: string[]; mode: "front" | "back" | "value"; value?: number }
@@ -371,6 +376,8 @@ const initialUI: UIState = {
   showPropertiesPanel: true,
   showInstancesPanel: true,
   showLayersPanel: true,
+  is3DMode: false,
+  gizmoMode3D: "translate",
   zoom: 1,
   pan: { x: 0, y: 0 },
   showHitMasks: false,
@@ -1075,16 +1082,16 @@ function projectReducer(state: State, action: Action): State {
         withEffects(s, action.target, (list) => [...list, action.effect]),
       );
 
+    case "deleteEffect":
+      return patchScene(state, (s) =>
+        withEffects(s, action.target, (list) => list.filter((_, i) => i !== action.index)),
+      );
+
     case "updateEffect":
       return patchScene(state, (s) =>
         withEffects(s, action.target, (list) =>
           list.map((e, i) => (i === action.index ? { ...e, ...action.patch } : e)),
         ),
-      );
-
-    case "deleteEffect":
-      return patchScene(state, (s) =>
-        withEffects(s, action.target, (list) => list.filter((_, i) => i !== action.index)),
       );
 
     case "moveEffect":
@@ -1162,6 +1169,39 @@ function projectReducer(state: State, action: Action): State {
         ...s,
         instances: s.instances.map((i) => (i.id === action.id ? { ...i, ...action.patch } : i)),
       }));
+
+    case "reparentInstance":
+      return patchScene(state, (s) => {
+        let instances = [...s.instances];
+        const target = instances.find((i) => i.id === action.id);
+        if (!target) return s;
+        
+        // Remove from old parent
+        if (target.parentId) {
+          instances = instances.map((i) =>
+            i.id === target.parentId
+              ? { ...i, children: (i.children || []).filter((id) => id !== action.id) }
+              : i
+          );
+        }
+        
+        // Add to new parent
+        if (action.newParentId) {
+          instances = instances.map((i) =>
+            i.id === action.newParentId
+              ? { ...i, children: [...(i.children || []), action.id] }
+              : i
+          );
+        }
+        
+        // Update target's parentId
+        instances = instances.map((i) =>
+          i.id === action.id ? { ...i, parentId: action.newParentId } : i
+        );
+        
+        return { ...s, instances };
+      });
+
 
     case "deleteInstances":
       return patchScene(state, (s) => ({

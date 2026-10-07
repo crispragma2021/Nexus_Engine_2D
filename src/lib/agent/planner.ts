@@ -48,6 +48,62 @@ const normalize = (value: string) =>
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
 
+export function generateButtonSvgDataUrl(name: string): string {
+  const isJump = /salto|jump|brinco/i.test(name);
+  const isLeft = /izq|left/i.test(name);
+  const isRight = /der|right/i.test(name);
+
+  // PlayStation / Xbox arcade gamepad button styling
+  const accentColor = isJump ? "#00FF87" : isLeft ? "#00F0FF" : isRight ? "#00F0FF" : "#FF9F43";
+  const icon = isJump ? "✕" : isLeft ? "◀" : isRight ? "▶" : "◯";
+  const label = isJump ? "SALTAR" : isLeft ? "IZQUIERDA" : isRight ? "DERECHA" : name.toUpperCase().slice(0, 8);
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+    <defs>
+      <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+        <feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#000000" flood-opacity="0.9"/>
+      </filter>
+      <linearGradient id="rimGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#4A4E69"/>
+        <stop offset="50%" stop-color="#1F2232"/>
+        <stop offset="100%" stop-color="#0B0C14"/>
+      </linearGradient>
+      <radialGradient id="bodyGrad" cx="45%" cy="35%" r="60%">
+        <stop offset="0%" stop-color="#2D3250"/>
+        <stop offset="70%" stop-color="#161828"/>
+        <stop offset="100%" stop-color="#0A0B13"/>
+      </radialGradient>
+      <linearGradient id="glassGloss" x1="0%" y1="0%" x2="0%" y2="100%">
+        <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.4"/>
+        <stop offset="50%" stop-color="#FFFFFF" stop-opacity="0.05"/>
+        <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+      </linearGradient>
+      <filter id="neonGlow">
+        <feGaussianBlur stdDeviation="2.5" result="blur"/>
+        <feMerge>
+          <feMergeNode in="blur"/>
+          <feMergeNode in="SourceGraphic"/>
+        </feMerge>
+      </filter>
+    </defs>
+    <!-- Dark outer backdrop circle for 100% legibility over grass/dirt/sky -->
+    <circle cx="64" cy="64" r="60" fill="#040408" filter="url(#shadow)"/>
+    <!-- Outer metallic bevel rim -->
+    <circle cx="64" cy="64" r="56" fill="url(#rimGrad)" stroke="#5B628B" stroke-width="2"/>
+    <!-- Inner glowing ring -->
+    <circle cx="64" cy="64" r="48" fill="url(#bodyGrad)" stroke="${accentColor}" stroke-width="3" filter="url(#neonGlow)"/>
+    <!-- Glass dome highlight -->
+    <path d="M 22 52 A 46 46 0 0 1 106 52 A 48 40 0 0 0 22 52 Z" fill="url(#glassGloss)"/>
+    <!-- PlayStation emblem -->
+    <text x="64" y="52" font-family="'Segoe UI', Arial, sans-serif" font-size="34" font-weight="900" fill="${accentColor}" text-anchor="middle" dominant-baseline="central" filter="url(#neonGlow)">${icon}</text>
+    <!-- Label badge -->
+    <rect x="22" y="86" width="84" height="22" rx="11" fill="#080912" stroke="${accentColor}" stroke-width="1.5"/>
+    <text x="64" y="97" font-family="'Segoe UI', Arial, sans-serif" font-size="11" font-weight="900" fill="#FFFFFF" text-anchor="middle" dominant-baseline="central" letter-spacing="1">${label}</text>
+  </svg>`;
+
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
 /** Words skipped before a name ("el objeto X") — includes category words. */
 const SKIP_WORDS = new Set([
   "el",
@@ -286,6 +342,125 @@ export function planFromInstruction(prompt: unknown, context: PlannerContext): P
   const objectByName = (name: string | null) =>
     lookupScene ? (lookupScene.objects.find((object) => object.name === name) ?? null) : null;
 
+  /* ----------------------------------------------------- mandos / botones visuales */
+  const wantsMandoButton = /\b(?:mandos?|controles?|botón|botones|boton|touch|táctil|tactil|pantalla)\b/.test(normalized);
+  if (wantsMandoButton && !wantsNewScene) {
+    const gameW = project.gameSettings.windowWidth || 800;
+    const gameH = project.gameSettings.windowHeight || 600;
+
+    const explicitPos = parseCoordinatePair(text);
+    const customName = extractName(text, /botón|boton|mando|control/);
+
+    const isJumpOnly =
+      /\b(?:salto|saltar)\b/.test(normalized) &&
+      !/\b(?:izq|derecha|mover|movimiento|controles?\s+táctiles?|mandos?\s+táctiles?)\b/.test(
+        normalized,
+      );
+
+    const jumpName = customName ?? "BotonSalto";
+    const btnSize = Math.max(48, Math.round(gameW * 0.08));
+
+    const buttonsToCreate = isJumpOnly
+      ? [
+          {
+            name: jumpName,
+            x: explicitPos
+              ? explicitPos.x
+              : (context.cursorPosition?.x ?? Math.round(gameW - btnSize - 40)),
+            y: explicitPos
+              ? explicitPos.y
+              : (context.cursorPosition?.y ?? Math.round(gameH - btnSize - 40)),
+            key: "Space",
+            action: "jump",
+          },
+        ]
+      : [
+          {
+            name: "BotonIzquierda",
+            x: Math.round(gameW * 0.05),
+            y: Math.round(gameH - btnSize - 40),
+            key: "Left",
+            action: "left",
+          },
+          {
+            name: "BotonDerecha",
+            x: Math.round(gameW * 0.05 + btnSize + 16),
+            y: Math.round(gameH - btnSize - 40),
+            key: "Right",
+            action: "right",
+          },
+          {
+            name: jumpName,
+            x: Math.round(gameW - btnSize - 40),
+            y: Math.round(gameH - btnSize - 40),
+            key: "Space",
+            action: "jump",
+          },
+        ];
+
+    const playerObj =
+      (objectAtTail(text) ? objectByName(objectAtTail(text)) : null) ??
+      lookupScene?.objects.find((o) => /jugador|player|dino|nave|personaje/i.test(o.name)) ??
+      lookupScene?.objects[0];
+
+    for (const btn of buttonsToCreate) {
+      const existingObj = lookupScene ? lookupScene.objects.find((o) => o.name === btn.name) : null;
+      const targetObjId = existingObj ? existingObj.id : btn.name;
+
+      if (!existingObj) {
+        operations.push(
+          createOperation("create_object", {
+            sceneName: targetSceneName,
+            name: btn.name,
+            type: "Sprite",
+            asset: generateButtonSvgDataUrl(btn.name),
+          })
+        );
+        summaryParts.push(`Crear objeto visual «${btn.name}»`);
+      }
+
+      const existingInst =
+        existingObj && lookupScene
+          ? lookupScene.instances.find((inst) => inst.objectId === existingObj.id)
+          : null;
+
+      if (!existingInst) {
+        operations.push(
+          createOperation("create_instance", {
+            sceneName: targetSceneName,
+            objectId: targetObjId,
+            x: btn.x,
+            y: btn.y,
+            width: btnSize,
+            height: btnSize,
+          })
+        );
+        summaryParts.push(`Colocar en escena «${btn.name}» en (${btn.x}, ${btn.y})`);
+      }
+
+      if (playerObj) {
+        const actionPayload =
+          btn.action === "left"
+            ? { typeId: "ChangeX", parameters: { object: playerObj.name, op: "add", value: "-10" } }
+            : btn.action === "right"
+            ? { typeId: "ChangeX", parameters: { object: playerObj.name, op: "add", value: "10" } }
+            : { typeId: "ChangeY", parameters: { object: playerObj.name, op: "add", value: "-600" } };
+
+        operations.push(
+          createOperation("create_event", {
+            sceneName: targetSceneName,
+            conditions: [
+              { typeId: "SourisSurObjet", parameters: { object: btn.name } },
+              { typeId: "SourisBouton", parameters: { button: "Left" } },
+            ],
+            actions: [actionPayload],
+          })
+        );
+        summaryParts.push(`Conectar toque de «${btn.name}» a «${playerObj.name}»`);
+      }
+    }
+  }
+
   /* ------------------------------------------------------------ objects */
   const wantsObject =
     /(?:crea|crear|anade|anadir|agrega|agregar|genera|generar)\b[^.]*?\b(objeto|texto)\b/.test(
@@ -297,9 +472,15 @@ export function planFromInstruction(prompt: unknown, context: PlannerContext): P
       return { plan: null, reason: "Indica el nombre del objeto que quieres crear." };
     }
     let type = "Sprite";
-    if (/\btexto\b/.test(normalized)) type = "TextObject::Text";
-    else if (/\bspritesheet\b|\bhoja de sprites\b/.test(normalized))
+    if (
+      /\btexto\b/.test(normalized) &&
+      !/\b(?:boton|botón|mando|control|salto|touch)\b/.test(normalized) &&
+      !/\b(?:boton|botón|mando|control|salto|touch)\b/.test(name.toLowerCase())
+    ) {
+      type = "TextObject::Text";
+    } else if (/\bspritesheet\b|\bhoja de sprites\b/.test(normalized)) {
       type = "SpriteObject::SpriteSheet";
+    }
     if (!isCreatableObjectType(type)) {
       return { plan: null, reason: `El tipo de objeto «${type}» no está disponible en el editor.` };
     }
@@ -307,6 +488,8 @@ export function planFromInstruction(prompt: unknown, context: PlannerContext): P
     if (type === "TextObject::Text") {
       const quoted = text.match(/["“]([^"”]+)["”]/u);
       payload["text"] = quoted?.[1] ?? "Texto";
+    } else if (type === "Sprite" && /boton|mando|button|salto|touch/i.test(name)) {
+      payload["asset"] = generateButtonSvgDataUrl(name);
     }
     operations.push(createOperation("create_object", payload));
     summaryParts.push(

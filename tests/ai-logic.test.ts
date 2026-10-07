@@ -51,6 +51,16 @@ test("compiles keyboard movement with catalog-compatible parameters", () => {
   });
 });
 
+test("compiles high level controls request like 'coloca los mandos para Jugador'", () => {
+  const events = compileIntentToEvents("coloca los mandos para Jugador", context);
+  assert.equal(events.length, 4);
+  assert.equal(events[0]?.conditions[0]?.parameters.key, "Left");
+  assert.equal(events[0]?.actions[0]?.parameters.object, "Jugador");
+  assert.equal(events[1]?.conditions[0]?.parameters.key, "Right");
+  assert.equal(events[2]?.conditions[0]?.parameters.key, "Up");
+  assert.equal(events[3]?.conditions[0]?.parameters.key, "Down");
+});
+
 test("compiles timers, creation coordinates and the active layer", () => {
   const [event] = compileIntentToEvents("Cada 1,5 segundos crea Enemigo en (640, 240)", context);
 
